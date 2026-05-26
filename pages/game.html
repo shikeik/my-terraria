@@ -244,6 +244,29 @@
                         this.instanceMap[x][y] = null;
                     }
                 }
+
+                // 高亮框：LineSegments
+                const hlGeo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
+                const hlEdges = new THREE.EdgesGeometry(hlGeo);
+                const hlMat = new THREE.LineBasicMaterial({ color: 0xff5050, transparent: true, opacity: 0.8 });
+                this.highlightMesh = new THREE.LineSegments(hlEdges, hlMat);
+                this.highlightMesh.visible = false;
+                this.scene.add(this.highlightMesh);
+
+                // 星星：Points
+                const starCount = 50;
+                const starGeo = new THREE.BufferGeometry();
+                const starPos = new Float32Array(starCount * 3);
+                for (let i = 0; i < starCount; i++) {
+                    starPos[i * 3]     = (i * 137.5) % 10000;
+                    starPos[i * 3 + 1] = (i * 73.3) % 6000 + 2000;  // y > 2000 天空区域
+                    starPos[i * 3 + 2] = -1;
+                }
+                starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+                const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true, opacity: 0.3 });
+                this.stars = new THREE.Points(starGeo, starMat);
+                this.scene.add(this.stars);
+
                 console.log('[three] Three.js 初始化完成');
             },
 
@@ -360,8 +383,30 @@
                 this.camera.updateProjectionMatrix();
             },
 
+            updateHighlight() {
+                const mx = State.mouseWorldX;
+                const my = State.mouseWorldY;
+                if (mx < 0 || mx >= CONFIG.WORLD_WIDTH || my < 0 || my >= CONFIG.WORLD_HEIGHT) {
+                    this.highlightMesh.visible = false;
+                    return;
+                }
+                const ts = CONFIG.TILE_SIZE;
+                this.highlightMesh.position.set(mx * ts + ts / 2, my * ts + ts / 2, 0);
+                this.highlightMesh.visible = true;
+                const color = State.isDigging ? 0xff5050 : 0xffff64;
+                this.highlightMesh.material.color.setHex(color);
+            },
+
+            updateStars() {
+                if (!this.stars) return;
+                const cx = State.camera.x;
+                this.stars.position.x = -cx * 0.1;
+            },
+
             render() {
                 if (!this.renderer) return;
+                this.updateHighlight();
+                this.updateStars();
                 this.renderer.render(this.scene, this.camera);
             },
 
