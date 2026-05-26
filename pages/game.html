@@ -226,10 +226,59 @@
                     this.solidMeshes[type] = mesh;
                 });
 
-                const waterMat = new THREE.MeshBasicMaterial({ color: 0x4169E1, transparent: true, opacity: 0.6 });
+                // 水 ShaderMaterial：与 v65 Canvas 2D 完全一致
+                const waterShader = {
+                    uniforms: {
+                        uTime: { value: 0.0 }
+                    },
+                    vertexShader: `
+                        uniform float uTime;
+                        varying vec2 vUv;
+                        varying float vTileX;
+                        varying float vTileY;
+                        void main() {
+                            vUv = uv;
+                            float worldX = instanceMatrix[3][0];
+                            float worldY = instanceMatrix[3][1];
+                            // 转换为格子坐标（与 v65 的 x, y 一致）
+                            vTileX = worldX / 32.0;
+                            vTileY = worldY / 32.0;
+                            vec3 pos = position;
+                            // 整列波动：sin(time*2 + x*0.5) * 2（复刻 v65）
+                            float wave = sin(uTime * 2.0 + vTileX * 0.5) * 2.0;
+                            pos.y += wave;
+                            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float uTime;
+                        varying vec2 vUv;
+                        varying float vTileX;
+                        varying float vTileY;
+                        void main() {
+                            // 基础透明蓝：rgba(65, 105, 225, alpha)（复刻 v65）
+                            vec3 baseColor = vec3(0.255, 0.412, 0.882);
+                            // alpha：0.5 + sin(time*3 + x*0.7 + y*0.5) * 0.15（复刻 v65）
+                            float alpha = 0.5 + sin(uTime * 3.0 + vTileX * 0.7 + vTileY * 0.5) * 0.15;
+                            // 顶部高光条：rgba(255,255,255, 0.1 + sin(time*4+x)*0.05)（复刻 v65）
+                            // 顶部 2px 区域（vUv.y > 30/32 = 0.9375）
+                            float isTop = step(0.9375, vUv.y);
+                            float hlAlpha = 0.1 + sin(uTime * 4.0 + vTileX) * 0.05;
+                            vec3 color = mix(baseColor, vec3(1.0, 1.0, 1.0), isTop * hlAlpha);
+                            gl_FragColor = vec4(color, alpha);
+                        }
+                    `
+                };
+                const waterMat = new THREE.ShaderMaterial({
+                    uniforms: waterShader.uniforms,
+                    vertexShader: waterShader.vertexShader,
+                    fragmentShader: waterShader.fragmentShader,
+                    transparent: true
+                });
                 this.waterMesh = new THREE.InstancedMesh(geo, waterMat, maxCount);
                 this.waterMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
                 this.scene.add(this.waterMesh);
+                this.waterUniforms = waterShader.uniforms;
 
                 // platform 半高 8px
                 const platGeo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, 8, 1);
@@ -397,6 +446,12 @@
                 this.highlightMesh.material.color.setHex(color);
             },
 
+            updateWater() {
+                if (this.waterUniforms) {
+                    this.waterUniforms.uTime.value = performance.now() / 1000.0;
+                }
+            },
+
             updateStars() {
                 if (!this.stars || !this.starBase) return;
                 const positions = this.stars.geometry.attributes.position.array;
@@ -420,6 +475,7 @@
 
             render() {
                 if (!this.renderer) return;
+                this.updateWater();
                 this.updateHighlight();
                 this.updateStars();
                 this.renderer.render(this.scene, this.camera);
