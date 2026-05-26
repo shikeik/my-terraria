@@ -474,7 +474,8 @@
                 const atlas = window.__ATLAS_TEXTURE || new THREE.Texture();
                 const terrainShader = {
                     uniforms: {
-                        uAtlas: { value: atlas }
+                        uAtlas: { value: atlas },
+                        uAtlasCount: { value: window.__ATLAS_COUNT || 8 }
                     },
                     vertexShader: `
                         attribute float aTileIndex;
@@ -488,12 +489,13 @@
                     `,
                     fragmentShader: `
                         uniform sampler2D uAtlas;
+                        uniform float uAtlasCount;
                         varying vec2 vUv;
                         varying float vTileIndex;
                         void main() {
                             // UV 内缩 0.05：消除图集粘连
                             vec2 innerUv = clamp(vUv, 0.05, 0.95);
-                            vec2 atlasUv = vec2((vTileIndex + innerUv.x) / 8.0, innerUv.y);
+                            vec2 atlasUv = vec2((vTileIndex + innerUv.x) / uAtlasCount, innerUv.y);
                             gl_FragColor = texture2D(uAtlas, atlasUv);
                         }
                     `
@@ -1587,12 +1589,11 @@
         atlasCtx: null,
         atlasTexture: null,
         tileSize: 32,
-        atlasWidth: 256, // 7 * 32
+        atlasWidth: 0,
         atlasHeight: 32,
 
         init() {
             this.atlasCanvas = document.createElement('canvas');
-            this.atlasCanvas.width = this.atlasWidth;
             this.atlasCanvas.height = this.atlasHeight;
             this.atlasCtx = this.atlasCanvas.getContext('2d');
             console.log('[texture] 图集生成器初始化');
@@ -1686,6 +1687,8 @@
             const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water', 'ice'];
             const s = this.tileSize;
             this.atlasCtx.imageSmoothingEnabled = false;
+            this.atlasWidth = types.length * s;
+            this.atlasCanvas.width = this.atlasWidth;
             this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
             types.forEach((type, i) => {
                 const tile = this.generate(type);
@@ -1694,6 +1697,7 @@
                 if (data) data.tileIndex = i;
             });
             console.log('[texture] 图集构建完成:', types.join(', '));
+            window.__ATLAS_COUNT = types.length;
             return this.atlasCanvas;
         },
 
