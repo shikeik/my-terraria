@@ -129,6 +129,138 @@
             getAllPlaceable() { return Object.keys(this._blocks).filter(k => k !== 'air'); }
         };
 
+
+        // ============================================================
+        //  MODULE: TextureGenerator
+        // ============================================================
+        const TextureGenerator = {
+            atlasCanvas: null,
+            atlasCtx: null,
+            atlasTexture: null,
+            tileSize: 32,
+            atlasWidth: 224, // 7 * 32
+            atlasHeight: 32,
+
+            init() {
+                this.atlasCanvas = document.createElement('canvas');
+                this.atlasCanvas.width = this.atlasWidth;
+                this.atlasCanvas.height = this.atlasHeight;
+                this.atlasCtx = this.atlasCanvas.getContext('2d');
+                console.log('[texture] 图集生成器初始化');
+            },
+
+            generate(type) {
+                const s = this.tileSize;
+                const c = document.createElement('canvas');
+                c.width = s;
+                c.height = s;
+                const ctx = c.getContext('2d');
+                const data = BlockRegistry.get(type);
+                if (!data) return c;
+
+                // 基底
+                ctx.fillStyle = data.color;
+                ctx.fillRect(0, 0, s, s);
+
+                // 通用边框（除 platform/water 外）
+                if (type !== 'platform' && type !== 'water') {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    ctx.fillRect(0, 0, s, 2);
+                    ctx.fillRect(0, 0, 2, s);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.fillRect(s - 2, 0, 2, s);
+                    ctx.fillRect(0, s - 2, s, 2);
+                    if (type === 'dirt' || type === 'grass') {
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                        ctx.fillRect(8, 12, 4, 4);
+                        ctx.fillRect(20, 6, 3, 3);
+                    }
+                }
+
+                // platform：32x32 贴图，下方 24px 透明
+                if (type === 'platform') {
+                    ctx.clearRect(0, 0, s, s);
+                    const platH = 8;
+                    const r = 8;
+                    ctx.fillStyle = '#C4956A';
+                    ctx.beginPath();
+                    ctx.moveTo(r, 0);
+                    ctx.lineTo(s - r, 0);
+                    ctx.quadraticCurveTo(s, 0, s, r);
+                    ctx.lineTo(s, platH - r);
+                    ctx.quadraticCurveTo(s, platH, s - r, platH);
+                    ctx.lineTo(r, platH);
+                    ctx.quadraticCurveTo(0, platH, 0, platH - r);
+                    ctx.lineTo(0, r);
+                    ctx.quadraticCurveTo(0, 0, r, 0);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#A07850';
+                    ctx.fillRect(r, 0, s - r * 2, 2);
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(0, 0, r, platH);
+                    ctx.fillRect(s - r, 0, r, platH);
+                    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                    ctx.fillRect(10, 3, 6, 1);
+                    ctx.fillRect(20, 5, 8, 1);
+                    ctx.fillRect(6, 7, 10, 1);
+                    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                    ctx.fillRect(r, platH - 1, s - r * 2, 1);
+                }
+
+                // water：静态蓝底 + 顶部高光条
+                if (type === 'water') {
+                    ctx.fillStyle = 'rgba(65, 105, 225, 0.6)';
+                    ctx.fillRect(0, 0, s, s);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.fillRect(0, 0, s, 2);
+                }
+
+                return c;
+            },
+
+            buildAtlas() {
+                const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water'];
+                const s = this.tileSize;
+                this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
+                types.forEach((type, i) => {
+                    const tile = this.generate(type);
+                    this.atlasCtx.drawImage(tile, i * s, 0);
+                    const data = BlockRegistry.get(type);
+                    if (data) data.tileIndex = i;
+                });
+                console.log('[texture] 图集构建完成:', types.join(', '));
+                return this.atlasCanvas;
+            },
+
+            getTexture() {
+                if (!this.atlasTexture) {
+                    this.atlasTexture = new THREE.CanvasTexture(this.atlasCanvas);
+                    this.atlasTexture.magFilter = THREE.NearestFilter;
+                    this.atlasTexture.minFilter = THREE.NearestFilter;
+                }
+                return this.atlasTexture;
+            },
+
+            preview() {
+                const url = this.atlasCanvas.toDataURL();
+                const div = document.createElement('div');
+                div.style.cssText = 'position:fixed;top:60px;left:12px;z-index:9998;background:#1e1e1e;border:2px solid #444;padding:8px;border-radius:4px;cursor:pointer;';
+                const img = document.createElement('img');
+                img.src = url;
+                img.style.cssText = 'image-rendering:pixelated;width:224px;height:32px;';
+                div.appendChild(img);
+                const label = document.createElement('div');
+                label.textContent = '图集预览 (224x32) 点击关闭';
+                label.style.cssText = 'color:#888;font-size:11px;margin-top:4px;text-align:center;';
+                div.appendChild(label);
+                div.addEventListener('click', () => div.remove());
+                document.body.appendChild(div);
+                console.log('[texture] 预览已显示，点击关闭');
+                return url;
+            }
+        };
+
         // ============================================================
         //  MODULE: State
         // ============================================================
@@ -205,7 +337,6 @@
                 canvas.height = h;
 
                 this.scene = new THREE.Scene();
-                // 左下坐标系：camera.bottom=0, camera.top=h
                 this.camera = new THREE.OrthographicCamera(0, w, 0, h, 1, 1000);
                 this.camera.position.z = 10;
 
@@ -214,79 +345,75 @@
                 this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 this.renderer.setClearColor(0x000000, 0);
 
-                const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
                 const maxCount = CONFIG.WORLD_WIDTH * CONFIG.WORLD_HEIGHT;
                 const geo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
 
-                solidTypes.forEach(type => {
-                    const data = BlockRegistry.get(type);
-                    const mat = new THREE.MeshBasicMaterial({ color: data.color });
-                    const mesh = new THREE.InstancedMesh(geo, mat, maxCount);
-                    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-                    this.scene.add(mesh);
-                    this.solidMeshes[type] = mesh;
-                });
-
-                // 水 ShaderMaterial：与 v65 Canvas 2D 完全一致
-                const waterShader = {
+                // 统一地形 ShaderMaterial：图集 + 水波动
+                const atlas = TextureGenerator.getTexture();
+                const terrainShader = {
                     uniforms: {
-                        uTime: { value: 0.0 }
+                        uTime: { value: 0.0 },
+                        uAtlas: { value: atlas }
                     },
                     vertexShader: `
                         uniform float uTime;
+                        attribute float aTileIndex;
                         varying vec2 vUv;
-                        varying float vTileX;
-                        varying float vTileY;
+                        varying float vTileIndex;
+                        varying float vWorldX;
+                        varying float vWorldY;
                         void main() {
                             vUv = uv;
+                            vTileIndex = aTileIndex;
                             float worldX = instanceMatrix[3][0];
                             float worldY = instanceMatrix[3][1];
-                            // 转换为格子坐标（与 v65 的 x, y 一致）
-                            vTileX = worldX / 32.0;
-                            vTileY = worldY / 32.0;
+                            vWorldX = worldX / 32.0;
+                            vWorldY = worldY / 32.0;
                             vec3 pos = position;
-                            // 整列波动：sin(time*2 + x*0.5) * 2（复刻 v65）
-                            float wave = sin(uTime * 2.0 + vTileX * 0.5) * 2.0;
-                            pos.y += wave;
+                            // water 波动（tileIndex 6）
+                            if (aTileIndex == 6.0) {
+                                float wave = sin(uTime * 2.0 + vWorldX * 0.5) * 2.0;
+                                pos.y += wave;
+                            }
                             gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
                         }
                     `,
                     fragmentShader: `
                         uniform float uTime;
+                        uniform sampler2D uAtlas;
                         varying vec2 vUv;
-                        varying float vTileX;
-                        varying float vTileY;
+                        varying float vTileIndex;
+                        varying float vWorldX;
+                        varying float vWorldY;
                         void main() {
-                            // 基础透明蓝：rgba(65, 105, 225, alpha)（复刻 v65）
-                            vec3 baseColor = vec3(0.255, 0.412, 0.882);
-                            // alpha：0.5 + sin(time*3 + x*0.7 + y*0.5) * 0.15（复刻 v65）
-                            float alpha = 0.5 + sin(uTime * 3.0 + vTileX * 0.7 + vTileY * 0.5) * 0.15;
-                            // 顶部高光条：rgba(255,255,255, 0.1 + sin(time*4+x)*0.05)（复刻 v65）
-                            // 顶部 2px 区域（vUv.y > 30/32 = 0.9375）
-                            float isTop = step(0.9375, vUv.y);
-                            float hlAlpha = 0.1 + sin(uTime * 4.0 + vTileX) * 0.05;
-                            vec3 color = mix(baseColor, vec3(1.0, 1.0, 1.0), isTop * hlAlpha);
-                            gl_FragColor = vec4(color, alpha);
+                            vec2 atlasUv = vec2((vTileIndex + vUv.x) / 7.0, vUv.y);
+                            vec4 tex = texture2D(uAtlas, atlasUv);
+                            if (vTileIndex == 6.0) {
+                                // water 动态 alpha + 高光
+                                float alpha = 0.5 + sin(uTime * 3.0 + vWorldX * 0.7 + vWorldY * 0.5) * 0.15;
+                                float hl = 0.1 + sin(uTime * 4.0 + vWorldX) * 0.05;
+                                float isTop = step(0.9375, vUv.y);
+                                vec3 color = mix(tex.rgb, vec3(1.0, 1.0, 1.0), isTop * hl);
+                                gl_FragColor = vec4(color, alpha);
+                            } else {
+                                gl_FragColor = tex;
+                            }
                         }
                     `
                 };
-                const waterMat = new THREE.ShaderMaterial({
-                    uniforms: waterShader.uniforms,
-                    vertexShader: waterShader.vertexShader,
-                    fragmentShader: waterShader.fragmentShader,
+                const terrainMat = new THREE.ShaderMaterial({
+                    uniforms: terrainShader.uniforms,
+                    vertexShader: terrainShader.vertexShader,
+                    fragmentShader: terrainShader.fragmentShader,
                     transparent: true
                 });
-                this.waterMesh = new THREE.InstancedMesh(geo, waterMat, maxCount);
-                this.waterMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-                this.scene.add(this.waterMesh);
-                this.waterUniforms = waterShader.uniforms;
-
-                // platform 半高 8px
-                const platGeo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, 8, 1);
-                const platMat = new THREE.MeshBasicMaterial({ color: BlockRegistry.get('platform').color });
-                this.platMesh = new THREE.InstancedMesh(platGeo, platMat, maxCount);
-                this.platMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-                this.scene.add(this.platMesh);
+                this.terrainMesh = new THREE.InstancedMesh(geo, terrainMat, maxCount);
+                this.terrainMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                // aTileIndex 实例属性
+                const tileIndices = new Float32Array(maxCount);
+                this.terrainMesh.geometry.setAttribute('aTileIndex', new THREE.InstancedBufferAttribute(tileIndices, 1));
+                this.scene.add(this.terrainMesh);
+                this.terrainUniforms = terrainShader.uniforms;
 
                 for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
                     this.instanceMap[x] = [];
@@ -295,7 +422,7 @@
                     }
                 }
 
-                // 高亮框：LineSegments
+                // 高亮框
                 const hlGeo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
                 const hlEdges = new THREE.EdgesGeometry(hlGeo);
                 const hlMat = new THREE.LineBasicMaterial({ color: 0xff5050, transparent: true, opacity: 0.8 });
@@ -303,7 +430,7 @@
                 this.highlightMesh.visible = false;
                 this.scene.add(this.highlightMesh);
 
-                // 星星：屏幕空间视差（复刻 v65 drawStars）
+                // 星星
                 const starCount = 50;
                 const starGeo = new THREE.BufferGeometry();
                 const starPos = new Float32Array(starCount * 3);
@@ -311,112 +438,92 @@
                 const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true, opacity: 0.3 });
                 this.stars = new THREE.Points(starGeo, starMat);
                 this.scene.add(this.stars);
-                // 星星基础位置（屏幕空间，参考 v65）
                 this.starBase = [];
                 for (let i = 0; i < starCount; i++) {
                     this.starBase.push({ x: (i * 137.5) % 10000, y: (i * 73.3) % 10000 });
                 }
 
-                console.log('[three] Three.js 初始化完成');
+                console.log('[three] Three.js 初始化完成（统一图集）');
             },
 
             buildWorld() {
                 const ts = CONFIG.TILE_SIZE;
                 const W = CONFIG.WORLD_WIDTH;
                 const H = CONFIG.WORLD_HEIGHT;
-                const counts = { dirt: 0, stone: 0, grass: 0, sand: 0, wood: 0, water: 0, platform: 0 };
+                let count = 0;
 
-                const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
-                solidTypes.forEach(type => {
-                    const mesh = this.solidMeshes[type];
-                    for (let i = 0; i < mesh.count; i++) mesh.setMatrixAt(i, this._matrixHide);
-                    mesh.instanceMatrix.needsUpdate = true;
-                });
-                for (let i = 0; i < this.waterMesh.count; i++) this.waterMesh.setMatrixAt(i, this._matrixHide);
-                this.waterMesh.instanceMatrix.needsUpdate = true;
+                // 全部隐藏
+                for (let i = 0; i < this.terrainMesh.count; i++) {
+                    this.terrainMesh.setMatrixAt(i, this._matrixHide);
+                }
+                this.terrainMesh.instanceMatrix.needsUpdate = true;
+                const tileIndexAttr = this.terrainMesh.geometry.attributes.aTileIndex;
 
                 for (let x = 0; x < W; x++) {
                     for (let y = 0; y < H; y++) {
                         const block = State.world[x][y];
-                        if (block === 'air' || !block) { this.instanceMap[x][y] = null; continue; }
+                        if (block === 'air' || !block) {
+                            this.instanceMap[x][y] = null;
+                            continue;
+                        }
+                        const data = BlockRegistry.get(block);
+                        if (!data || data.tileIndex === undefined) {
+                            this.instanceMap[x][y] = null;
+                            continue;
+                        }
 
                         const px = x * ts + ts / 2;
                         const py = y * ts + ts / 2;
                         this.dummy.position.set(px, py, 0);
                         this.dummy.updateMatrix();
 
-                        if (block === 'water') {
-                            const idx = counts.water++;
-                            this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
-                            this.instanceMap[x][y] = { type: 'water', index: idx };
-                        } else if (block === 'platform') {
-                            const idx = counts.platform++;
-                            // platform 半高，中心在 y + 4（格子底部 + 4）
-                            this.dummy.position.set(px, y * ts + 4, 0);
-                            this.dummy.updateMatrix();
-                            this.platMesh.setMatrixAt(idx, this.dummy.matrix);
-                            this.instanceMap[x][y] = { type: 'platform', index: idx };
-                        } else if (this.solidMeshes[block]) {
-                            const idx = counts[block]++;
-                            this.solidMeshes[block].setMatrixAt(idx, this.dummy.matrix);
-                            this.instanceMap[x][y] = { type: block, index: idx };
-                        } else {
-                            this.instanceMap[x][y] = null;
-                        }
+                        this.terrainMesh.setMatrixAt(count, this.dummy.matrix);
+                        tileIndexAttr.setX(count, data.tileIndex);
+                        this.instanceMap[x][y] = { index: count, type: block };
+                        count++;
                     }
                 }
 
-                solidTypes.forEach(type => {
-                    this.solidMeshes[type].count = counts[type];
-                    this.solidMeshes[type].instanceMatrix.needsUpdate = true;
-                });
-                this.platMesh.count = counts.platform;
-                this.platMesh.instanceMatrix.needsUpdate = true;
-                this.waterMesh.count = counts.water;
-                this.waterMesh.instanceMatrix.needsUpdate = true;
-                console.log('[three] 世界构建完成，统计:', JSON.stringify(counts));
+                this.terrainMesh.count = count;
+                this.terrainMesh.instanceMatrix.needsUpdate = true;
+                tileIndexAttr.needsUpdate = true;
+                console.log('[three] 世界构建完成，实例数:', count);
             },
 
             updateBlock(x, y, oldType, newType) {
                 const ts = CONFIG.TILE_SIZE;
-                if (oldType && oldType !== 'air') {
-                    const info = this.instanceMap[x][y];
-                    if (info) {
-                        let mesh = null;
-                        if (info.type === 'water') mesh = this.waterMesh;
-                        else if (info.type === 'platform') mesh = this.platMesh;
-                        else mesh = this.solidMeshes[info.type];
-                        if (mesh) { mesh.setMatrixAt(info.index, this._matrixHide); mesh.instanceMatrix.needsUpdate = true; }
-                    }
+                const info = this.instanceMap[x][y];
+                const tileIndexAttr = this.terrainMesh.geometry.attributes.aTileIndex;
+
+                if (oldType && oldType !== 'air' && info) {
+                    this.terrainMesh.setMatrixAt(info.index, this._matrixHide);
+                    this.terrainMesh.instanceMatrix.needsUpdate = true;
                 }
+
                 if (newType && newType !== 'air') {
+                    const data = BlockRegistry.get(newType);
+                    if (!data || data.tileIndex === undefined) return;
+
                     const px = x * ts + ts / 2;
                     const py = y * ts + ts / 2;
                     this.dummy.position.set(px, py, 0);
                     this.dummy.rotation.set(0, 0, 0);
                     this.dummy.scale.set(1, 1, 1);
                     this.dummy.updateMatrix();
-                    if (newType === 'water') {
-                        const idx = this.waterMesh.count;
-                        this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
-                        this.waterMesh.count = idx + 1;
-                        this.waterMesh.instanceMatrix.needsUpdate = true;
-                        this.instanceMap[x][y] = { type: 'water', index: idx };
-                    } else if (newType === 'platform') {
-                        const idx = this.platMesh.count;
-                        this.dummy.position.set(x * ts + ts / 2, (y + 1) * ts - 4, 0);
-                        this.dummy.updateMatrix();
-                        this.platMesh.setMatrixAt(idx, this.dummy.matrix);
-                        this.platMesh.count = idx + 1;
-                        this.platMesh.instanceMatrix.needsUpdate = true;
-                        this.instanceMap[x][y] = { type: 'platform', index: idx };
-                    } else if (this.solidMeshes[newType]) {
-                        const idx = this.solidMeshes[newType].count;
-                        this.solidMeshes[newType].setMatrixAt(idx, this.dummy.matrix);
-                        this.solidMeshes[newType].count = idx + 1;
-                        this.solidMeshes[newType].instanceMatrix.needsUpdate = true;
-                        this.instanceMap[x][y] = { type: newType, index: idx };
+
+                    let idx;
+                    if (info) {
+                        idx = info.index;
+                    } else {
+                        idx = this.terrainMesh.count;
+                        this.terrainMesh.count = idx + 1;
                     }
+
+                    this.terrainMesh.setMatrixAt(idx, this.dummy.matrix);
+                    tileIndexAttr.setX(idx, data.tileIndex);
+                    this.terrainMesh.instanceMatrix.needsUpdate = true;
+                    tileIndexAttr.needsUpdate = true;
+                    this.instanceMap[x][y] = { index: idx, type: newType };
                 } else {
                     this.instanceMap[x][y] = null;
                 }
@@ -448,8 +555,8 @@
             },
 
             updateWater() {
-                if (this.waterUniforms) {
-                    this.waterUniforms.uTime.value = performance.now() / 1000.0;
+                if (this.terrainUniforms) {
+                    this.terrainUniforms.uTime.value = performance.now() / 1000.0;
                 }
             },
 
@@ -1361,6 +1468,8 @@
                     selector.appendChild(btn);
                 });
 
+                TextureGenerator.init();
+                TextureGenerator.buildAtlas();
                 ThreeJSRenderer.init();
                 World.init();
                 ThreeJSRenderer.buildWorld();
