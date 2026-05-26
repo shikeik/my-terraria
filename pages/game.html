@@ -590,7 +590,7 @@
             <div id="sideDrawer">
                 <div class="tab-bar">
                     <div class="tab-btn active" data-tab="intro">介绍</div>
-                    <div class="tab-btn" data-tab="debug">调试</div>
+                    <div class="tab-btn" data-tab="terrain">地形</div>
                 </div>
                 <div class="tab-content active" data-tab="intro">
                     <p>My Terraria - 简单体素世界</p>
@@ -599,8 +599,23 @@
                     <p>⛶ 顶部按钮切换全屏</p>
                     <p>双指捏合缩放世界</p>
                 </div>
-                <div class="tab-content" data-tab="debug">
-                    <p>地形配置（占位）</p>
+                <div class="tab-content" data-tab="terrain">
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <button id="rebuildBtn" style="padding:8px 12px;background:rgba(60,80,120,0.8);border:1px solid #5a5a7a;border-radius:4px;color:#ccc;font-size:12px;cursor:pointer;">🔄 重建地形</button>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">世界高度: <span id="worldHeightVal">256</span></label>
+                            <input type="range" id="worldHeightRange" min="128" max="512" value="256" style="flex:1;">
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">地形高度: <span id="terrainHeightVal">256</span></label>
+                            <input type="range" id="terrainHeightRange" min="50" max="512" value="256" style="flex:1;">
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">泥土: <span id="dirtMinVal">4</span>~<span id="dirtMaxVal">12</span></label>
+                                <input type="range" id="dirtMinRange" min="2" max="30" value="4" style="flex:1;">
+                                <input type="range" id="dirtMaxRange" min="4" max="60" value="12" style="flex:1;">
+                            </div>
+                    </div>
                 </div>
             </div>
             <div id="controls" class="game-gui">
@@ -847,10 +862,8 @@
         const TerrainConfig = {
             SEED: 42,
             SURFACE: {
-                BASE_Y: 200,
-                AMP_LOW: 30,
+                MAX_HEIGHT: 256,
                 FREQ_LOW: 0.005,
-                AMP_HIGH: 5,
                 FREQ_HIGH: 0.02
             },
             LAYERS: {
@@ -1369,9 +1382,12 @@
 
                     const nLow  = noise.fbm(x, 0, 2, T.SURFACE.FREQ_LOW,  0.5);
                     const nHigh = noise.fbm(x, 100, 2, T.SURFACE.FREQ_HIGH, 0.5);
+                    const nLow01  = (nLow + 1) * 0.5;
+                    const nHigh01 = (nHigh + 1) * 0.5;
+                    const surfaceNorm = nLow01 * 0.8 + nHigh01 * 0.2;
                     const surface = Math.min(
                         H - 5,
-                        T.SURFACE.BASE_Y + nLow * T.SURFACE.AMP_LOW + nHigh * T.SURFACE.AMP_HIGH
+                        Math.floor(T.SURFACE.MAX_HEIGHT * surfaceNorm)
                     );
 
                     const dirtDepth = Math.floor(
@@ -2219,6 +2235,120 @@
                 World.init();
                 ThreeJSRenderer.buildWorld();
                 PlayerRenderer.init();
+
+                // 地形 Tab 控件绑定
+                const rebuildBtn = document.getElementById('rebuildBtn');
+                const worldHeightRange = document.getElementById('worldHeightRange');
+                const worldHeightVal = document.getElementById('worldHeightVal');
+                const terrainHeightRange = document.getElementById('terrainHeightRange');
+                const terrainHeightVal = document.getElementById('terrainHeightVal');
+
+                if (worldHeightRange && worldHeightVal) {
+                    worldHeightRange.value = CONFIG.WORLD_HEIGHT;
+                    worldHeightVal.textContent = CONFIG.WORLD_HEIGHT;
+                    worldHeightRange.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value, 10);
+                        CONFIG.WORLD_HEIGHT = val;
+                        worldHeightVal.textContent = val;
+                        console.log('[terrain] 世界高度调整为:', val);
+                    });
+                }
+
+                if (terrainHeightRange && terrainHeightVal) {
+                    terrainHeightRange.value = TerrainConfig.SURFACE.MAX_HEIGHT;
+                    terrainHeightVal.textContent = TerrainConfig.SURFACE.MAX_HEIGHT;
+                    terrainHeightRange.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value, 10);
+                        TerrainConfig.SURFACE.MAX_HEIGHT = val;
+                        terrainHeightVal.textContent = val;
+                        console.log('[terrain] 地形高度调整为:', val);
+                    });
+                }
+
+                const dirtMinRange = document.getElementById('dirtMinRange');
+                const dirtMinVal = document.getElementById('dirtMinVal');
+                const dirtMaxRange = document.getElementById('dirtMaxRange');
+                const dirtMaxVal = document.getElementById('dirtMaxVal');
+                if (dirtMinRange && dirtMinVal && dirtMaxRange && dirtMaxVal) {
+                    dirtMinRange.value = TerrainConfig.LAYERS.DIRT_DEPTH_MIN;
+                    dirtMinVal.textContent = TerrainConfig.LAYERS.DIRT_DEPTH_MIN;
+                    dirtMaxRange.value = TerrainConfig.LAYERS.DIRT_DEPTH_MAX;
+                    dirtMaxVal.textContent = TerrainConfig.LAYERS.DIRT_DEPTH_MAX;
+                    dirtMinRange.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (val > TerrainConfig.LAYERS.DIRT_DEPTH_MAX) {
+                            TerrainConfig.LAYERS.DIRT_DEPTH_MAX = val;
+                            dirtMaxRange.value = val;
+                            dirtMaxVal.textContent = val;
+                        }
+                        TerrainConfig.LAYERS.DIRT_DEPTH_MIN = val;
+                        dirtMinVal.textContent = val;
+                        console.log('[terrain] 泥土厚度 MIN 调整为:', val);
+                    });
+                    dirtMaxRange.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (val < TerrainConfig.LAYERS.DIRT_DEPTH_MIN) {
+                            TerrainConfig.LAYERS.DIRT_DEPTH_MIN = val;
+                            dirtMinRange.value = val;
+                            dirtMinVal.textContent = val;
+                        }
+                        TerrainConfig.LAYERS.DIRT_DEPTH_MAX = val;
+                        dirtMaxVal.textContent = val;
+                        console.log('[terrain] 泥土厚度 MAX 调整为:', val);
+                    });
+                }
+
+                if (rebuildBtn) {
+                    rebuildBtn.addEventListener('click', () => {
+                        const oldHeight = State.world[0] ? State.world[0].length : CONFIG.WORLD_HEIGHT;
+                        console.log('[terrain] 重建地形... 旧高度:', oldHeight, '新高度:', CONFIG.WORLD_HEIGHT);
+                        for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
+                            State.world[x] = [];
+                        }
+                        const terrainMesh = ThreeJSRenderer.terrainMesh;
+                        const waterMesh = ThreeJSRenderer.waterMesh;
+                        for (let i = 0; i < terrainMesh.count; i++) {
+                            terrainMesh.setMatrixAt(i, ThreeJSRenderer._matrixHide);
+                        }
+                        terrainMesh.instanceMatrix.needsUpdate = true;
+                        for (let i = 0; i < waterMesh.count; i++) {
+                            waterMesh.setMatrixAt(i, ThreeJSRenderer._matrixHide);
+                        }
+                        waterMesh.instanceMatrix.needsUpdate = true;
+                        for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
+                            ThreeJSRenderer.instanceMap[x] = [];
+                            for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
+                                ThreeJSRenderer.instanceMap[x][y] = null;
+                            }
+                        }
+                        World.init();
+                        ThreeJSRenderer.buildWorld();
+                        // 如果世界高度降低，清空旧的多余部分
+                        if (CONFIG.WORLD_HEIGHT < oldHeight) {
+                            for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
+                                for (let y = CONFIG.WORLD_HEIGHT; y < oldHeight; y++) {
+                                    State.world[x][y] = 'air';
+                                    const info = ThreeJSRenderer.instanceMap[x][y];
+                                    if (info) {
+                                        if (info.mesh === 'water') {
+                                            waterMesh.setMatrixAt(info.index, ThreeJSRenderer._matrixHide);
+                                        } else {
+                                            terrainMesh.setMatrixAt(info.index, ThreeJSRenderer._matrixHide);
+                                        }
+                                        ThreeJSRenderer.instanceMap[x][y] = null;
+                                    }
+                                }
+                            }
+                            terrainMesh.instanceMatrix.needsUpdate = true;
+                            waterMesh.instanceMatrix.needsUpdate = true;
+                        }
+                        State.player.x = CONFIG.RESPAWN.x * CONFIG.TILE_SIZE;
+                        State.player.y = CONFIG.RESPAWN.y * CONFIG.TILE_SIZE;
+                        State.player.vx = 0;
+                        State.player.vy = 0;
+                        console.log('[terrain] 地形重建完成');
+                    });
+                }
 
                 Input.init();
                 Fullscreen.init();
