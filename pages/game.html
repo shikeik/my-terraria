@@ -129,6 +129,8 @@
     <div id="info">
         <div>⛏ 挖掘 / 🖱 放置</div>
         <div id="coords">X:0 Y:0</div>
+        <div id="mouseCoords">MX:-- MY:--</div>
+        <div id="zoom">Z:1.0</div>
         <div id="fps">FPS: 0</div>
     </div>
     <div id="blockSelector"></div>
@@ -356,7 +358,7 @@
             LONG_PRESS_DELAY: 300,
             REPEAT_INTERVAL: 80,
             LONG_PRESS_MOVE_THRESHOLD: 20,
-            RESPAWN: { x: 2, y: 86 },
+            RESPAWN: { x: 96, y: 100 },
             WATER: {
                 MOVE_SCALE: 0.4,
                 DRAG: 0.95,
@@ -393,7 +395,7 @@
                 onGround: false,
                 facingRight: true
             },
-            camera: { x: 0, y: 0, zoom: 1.0 },
+            camera: { x: 0, y: 0, zoom: 10.0 },
             keys: { up: false, down: false, left: false, right: false, jump: false, sprint: false },
             selectedBlock: 'dirt',
             isDigging: true,
@@ -422,6 +424,8 @@
         function initDOM() {
             DOM.canvas         = document.getElementById('gameCanvas');
             DOM.coordsEl       = document.getElementById('coords');
+            DOM.mouseCoordsEl  = document.getElementById('mouseCoords');
+            DOM.zoomEl         = document.getElementById('zoom');
             DOM.fpsEl          = document.getElementById('fps');
             DOM.fullscreenBtn  = document.getElementById('fullscreenBtn');
             DOM.actionBtn      = document.getElementById('actionBtn');
@@ -1552,6 +1556,12 @@
                 ThreeJSRenderer.render();
                 DOM.coordsEl.textContent = 'X:' + Math.floor(State.player.x / CONFIG.TILE_SIZE)
                                          + ' Y:' + Math.floor(State.player.y / CONFIG.TILE_SIZE);
+                if (DOM.mouseCoordsEl) {
+                    const mx = State.mouseWorldX;
+                    const my = State.mouseWorldY;
+                    DOM.mouseCoordsEl.textContent = 'MX:' + (mx >= 0 ? mx : '--') + ' MY:' + (my >= 0 ? my : '--');
+                }
+                if (DOM.zoomEl) DOM.zoomEl.textContent = 'Z:' + State.camera.zoom.toFixed(1);
                 if (DOM.fpsEl) DOM.fpsEl.textContent = 'FPS:' + this.fps.value;
                 requestAnimationFrame((t) => this.tick(t));
             },
