@@ -1620,6 +1620,7 @@
             },
 
             update(dt) {
+                if (State.freeCamera) return;
                 const p = State.player;
                 const ts = CONFIG.TILE_SIZE;
                 const drop = State.dropThrough;
@@ -1806,10 +1807,10 @@
                 DOM.canvas.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     const delta = e.deltaY > 0 ? 1.1 : 0.9;
-                    const rect = DOM.canvas.getBoundingClientRect();
-                    const cx = e.clientX - rect.left;
-                    const cy = e.clientY - rect.top;
+                    const cw = window.innerWidth;
                     const ch = window.innerHeight;
+                    const cx = cw / 2;
+                    const cy = ch / 2;
                     const worldX = State.camera.x + cx * State.camera.zoom;
                     const worldY = State.camera.y + (ch - cy) * State.camera.zoom;
                     State.camera.zoom *= delta;
@@ -1847,19 +1848,15 @@
                     const newCenter = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
                     const ratio = ps.startDist / newDist;
                     const newZoom = ps.startZoom * ratio;
-                    const rect = DOM.canvas.getBoundingClientRect();
-                    const cx = newCenter.x - rect.left;
-                    const cy = newCenter.y - rect.top;
+                    const cw = window.innerWidth;
                     const ch = window.innerHeight;
+                    const cx = cw / 2;
+                    const cy = ch / 2;
                     const worldX = State.camera.x + cx * State.camera.zoom;
                     const worldY = State.camera.y + (ch - cy) * State.camera.zoom;
                     State.camera.zoom = newZoom;
                     State.camera.x = worldX - cx * newZoom;
                     State.camera.y = worldY - (ch - cy) * newZoom;
-                    const dx = (ps.lastCenter.x - newCenter.x) * newZoom;
-                    const dy = (newCenter.y - ps.lastCenter.y) * newZoom;
-                    State.camera.x += dx;
-                    State.camera.y += dy;
                     ps.lastCenter = { ...newCenter };
                 }, { passive: false });
                 DOM.canvas.addEventListener('touchend', (e) => {
@@ -1943,6 +1940,8 @@
                 InputState.lastGridX = -1;
                 InputState.lastGridY = -1;
 
+                if (State.freeCamera) return; // 自由相机禁止交互
+
                 // 鼠标按键决定操作模式：左键挖掘，右键放置
                 if (e.pointerType === 'mouse') {
                     if (e.button === 0) InputState.actionMode = 'dig';
@@ -1979,7 +1978,7 @@
                 if (sw.x !== InputState.lastGridX || sw.y !== InputState.lastGridY) {
                     InputState.lastGridX = sw.x;
                     InputState.lastGridY = sw.y;
-                    this.doRepeatAction();
+                    if (!State.freeCamera) this.doRepeatAction();
                 }
             },
 
