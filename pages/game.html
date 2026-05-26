@@ -61,7 +61,7 @@
         <div id="fps">FPS: 0</div>
     </div>
     <div id="blockSelector"></div>
-    <div id="controls">
+    <div id="controls" class="game-gui">
         <div class="dpad">
             <div class="dpad-btn dpad-up"    data-key="up">▲</div>
             <div class="dpad-btn dpad-down"  data-key="down">▼</div>
@@ -69,8 +69,8 @@
             <div class="dpad-btn dpad-right" data-key="right">▶</div>
         </div>
     </div>
-    <div id="jumpBtn">⬆️</div>
-    <div id="actionBtn">⛏</div>
+    <div id="jumpBtn" class="game-gui">⬆️</div>
+    <div id="actionBtn" class="game-gui">⛏</div>
     <canvas id="gameCanvas"></canvas>
     <div id="consolePanel" class="collapsed">
         <div id="consoleHeader">
@@ -259,7 +259,9 @@
                         varying float vWorldX;
                         varying float vWorldY;
                         void main() {
-                            vec2 atlasUv = vec2((vTileIndex + vUv.x) / 7.0, vUv.y);
+                            // UV 内缩 0.05：vUv [0,1] → [0.05, 0.95]，消除图集粘连
+                            vec2 innerUv = clamp(vUv, 0.05, 0.95);
+                            vec2 atlasUv = vec2((vTileIndex + innerUv.x) / 7.0, innerUv.y);
                             vec4 tex = texture2D(uAtlas, atlasUv);
                             if (vTileIndex == 6.0) {
                                 // water 动态 alpha + 高光
@@ -1390,6 +1392,15 @@
                 Fullscreen.init();
                 ConsoleModule.init();
                 GameLoop.start();
+                // 设备检测：PC 隐藏操作 GUI
+                const isMobile = window.matchMedia('(pointer: coarse)').matches;
+                if (!isMobile) {
+                    document.querySelectorAll('.game-gui').forEach(el => el.style.display = 'none');
+                    console.log('[app] PC 模式：操作 GUI 已隐藏');
+                } else {
+                    console.log('[app] 移动端模式：操作 GUI 已显示');
+                }
+
                 console.log('[app] 初始化全部完成');
             },
 
