@@ -129,138 +129,8 @@
             isSolid(type) { const d = this._blocks[type]; return d ? d.solid : false; },
             getAllPlaceable() { return Object.keys(this._blocks).filter(k => k !== 'air'); }
         };
+        window.BlockRegistry = BlockRegistry;
 
-
-        // ============================================================
-        //  MODULE: TextureGenerator
-        // ============================================================
-        const TextureGenerator = {
-            atlasCanvas: null,
-            atlasCtx: null,
-            atlasTexture: null,
-            tileSize: 32,
-            atlasWidth: 224, // 7 * 32
-            atlasHeight: 32,
-
-            init() {
-                this.atlasCanvas = document.createElement('canvas');
-                this.atlasCanvas.width = this.atlasWidth;
-                this.atlasCanvas.height = this.atlasHeight;
-                this.atlasCtx = this.atlasCanvas.getContext('2d');
-                console.log('[texture] 图集生成器初始化');
-            },
-
-            generate(type) {
-                const s = this.tileSize;
-                const c = document.createElement('canvas');
-                c.width = s;
-                c.height = s;
-                const ctx = c.getContext('2d');
-                const data = BlockRegistry.get(type);
-                if (!data) return c;
-
-                // 基底
-                ctx.fillStyle = data.color;
-                ctx.fillRect(0, 0, s, s);
-
-                // 通用边框（除 platform/water 外）
-                if (type !== 'platform' && type !== 'water') {
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-                    ctx.fillRect(0, 0, s, 2);
-                    ctx.fillRect(0, 0, 2, s);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-                    ctx.fillRect(s - 2, 0, 2, s);
-                    ctx.fillRect(0, s - 2, s, 2);
-                    if (type === 'dirt' || type === 'grass') {
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-                        ctx.fillRect(8, 12, 4, 4);
-                        ctx.fillRect(20, 6, 3, 3);
-                    }
-                }
-
-                // platform：32x32 贴图，下方 24px 透明
-                if (type === 'platform') {
-                    ctx.clearRect(0, 0, s, s);
-                    const platH = 8;
-                    const r = 8;
-                    ctx.fillStyle = '#C4956A';
-                    ctx.beginPath();
-                    ctx.moveTo(r, 0);
-                    ctx.lineTo(s - r, 0);
-                    ctx.quadraticCurveTo(s, 0, s, r);
-                    ctx.lineTo(s, platH - r);
-                    ctx.quadraticCurveTo(s, platH, s - r, platH);
-                    ctx.lineTo(r, platH);
-                    ctx.quadraticCurveTo(0, platH, 0, platH - r);
-                    ctx.lineTo(0, r);
-                    ctx.quadraticCurveTo(0, 0, r, 0);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.fillStyle = '#A07850';
-                    ctx.fillRect(r, 0, s - r * 2, 2);
-                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                    ctx.fillRect(0, 0, r, platH);
-                    ctx.fillRect(s - r, 0, r, platH);
-                    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-                    ctx.fillRect(10, 3, 6, 1);
-                    ctx.fillRect(20, 5, 8, 1);
-                    ctx.fillRect(6, 7, 10, 1);
-                    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-                    ctx.fillRect(r, platH - 1, s - r * 2, 1);
-                }
-
-                // water：静态蓝底 + 顶部高光条
-                if (type === 'water') {
-                    ctx.fillStyle = 'rgba(65, 105, 225, 0.6)';
-                    ctx.fillRect(0, 0, s, s);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-                    ctx.fillRect(0, 0, s, 2);
-                }
-
-                return c;
-            },
-
-            buildAtlas() {
-                const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water'];
-                const s = this.tileSize;
-                this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
-                types.forEach((type, i) => {
-                    const tile = this.generate(type);
-                    this.atlasCtx.drawImage(tile, i * s, 0);
-                    const data = BlockRegistry.get(type);
-                    if (data) data.tileIndex = i;
-                });
-                console.log('[texture] 图集构建完成:', types.join(', '));
-                return this.atlasCanvas;
-            },
-
-            getTexture() {
-                if (!this.atlasTexture) {
-                    this.atlasTexture = new THREE.CanvasTexture(this.atlasCanvas);
-                    this.atlasTexture.magFilter = THREE.NearestFilter;
-                    this.atlasTexture.minFilter = THREE.NearestFilter;
-                }
-                return this.atlasTexture;
-            },
-
-            preview() {
-                const url = this.atlasCanvas.toDataURL();
-                const div = document.createElement('div');
-                div.style.cssText = 'position:fixed;top:60px;left:12px;z-index:9998;background:#1e1e1e;border:2px solid #444;padding:8px;border-radius:4px;cursor:pointer;';
-                const img = document.createElement('img');
-                img.src = url;
-                img.style.cssText = 'image-rendering:pixelated;width:224px;height:32px;';
-                div.appendChild(img);
-                const label = document.createElement('div');
-                label.textContent = '图集预览 (224x32) 点击关闭';
-                label.style.cssText = 'color:#888;font-size:11px;margin-top:4px;text-align:center;';
-                div.appendChild(label);
-                div.addEventListener('click', () => div.remove());
-                document.body.appendChild(div);
-                console.log('[texture] 预览已显示，点击关闭');
-                return url;
-            }
-        };
 
         // ============================================================
         //  MODULE: State
@@ -351,7 +221,7 @@
                 const geo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
 
                 // 统一地形 ShaderMaterial：图集 + 水波动
-                const atlas = TextureGenerator.getTexture();
+                const atlas = window.__ATLAS_TEXTURE || new THREE.Texture();
                 const terrainShader = {
                     uniforms: {
                         uTime: { value: 0.0 },
@@ -572,18 +442,16 @@
                 const positions = this.stars.geometry.attributes.position.array;
                 const cw = window.innerWidth;
                 const ch = window.innerHeight;
-                const cx = State.camera.x;
-                const cy = State.camera.y;
+                if (cw <= 0 || ch <= 0) return;
+                const cx = State.camera.x || 0;
+                const cy = State.camera.y || 0;
                 for (let i = 0; i < this.starBase.length; i++) {
                     const b = this.starBase[i];
-                    // 屏幕空间 X：视差 0.1 + 循环（复刻 v65）
                     const sx = ((b.x + cx * 0.1) % cw + cw) % cw;
-                    // 屏幕空间 Y：分布在屏幕顶部 60%（复刻 v65）
                     const screenY = b.y % (ch * 0.6);
-                    // 转换到世界坐标（左下坐标系：屏幕顶部 = cy + ch）
                     positions[i * 3]     = cx + sx;
                     positions[i * 3 + 1] = cy + ch - screenY;
-                    positions[i * 3 + 2] = -2; // 背景层
+                    positions[i * 3 + 2] = -2;
                 }
                 this.stars.geometry.attributes.position.needsUpdate = true;
             },
@@ -1474,19 +1342,9 @@
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
 
-                BlockRegistry.register('air',      { color: null,               solid: false, icon: '',   tooltip: '空气' });
-                BlockRegistry.register('dirt',     { color: '#8B6F47',           solid: true,  icon: '土',   tooltip: '泥土',     uiColor: '#8B4513' });
-                BlockRegistry.register('stone',    { color: '#7a7a85',           solid: true,  icon: '石',   tooltip: '石头',     uiColor: '#708090' });
-                BlockRegistry.register('grass',    { color: '#4a8c3f',           solid: true,  icon: '草',   tooltip: '草',       uiColor: '#228B22' });
-                BlockRegistry.register('wood',     { color: '#a07040',           solid: true,  icon: '木',   tooltip: '木头',     uiColor: '#D2691E' });
-                BlockRegistry.register('sand',     { color: '#d4b896',           solid: true,  icon: '沙',   tooltip: '沙子',     uiColor: '#FFD700' });
-                BlockRegistry.register('water',    { color: 'rgba(65,105,225,0.6)', solid: false, icon: '水',   tooltip: '水',       uiColor: '#4169E1' });
-                BlockRegistry.register('platform', { color: '#C4956A',           solid: true,  icon: '台',   tooltip: '平台',     uiColor: '#C4956A' });
-                console.log('[app] 方块注册完成:', BlockRegistry.getAllPlaceable().join(', '));
-
                 const selector = document.getElementById('blockSelector');
                 BlockRegistry.getAllPlaceable().forEach((type) => {
-                    const data = BlockRegistry.get(type);
+                    const data = window.BlockRegistry.get(type);
                     const btn = document.createElement('div');
                     btn.className = 'block-btn' + (type === State.selectedBlock ? ' selected' : '');
                     btn.style.background = data.uiColor || data.color || '#888';
@@ -1502,8 +1360,6 @@
                     selector.appendChild(btn);
                 });
 
-                TextureGenerator.init();
-                TextureGenerator.buildAtlas();
                 ThreeJSRenderer.init();
                 World.init();
                 ThreeJSRenderer.buildWorld();
@@ -1529,8 +1385,166 @@
             }
         };
 
-        App.init();
+        // 方块注册（必须在 TextureGenerator 之前）
+        BlockRegistry.register('air',      { color: null,               solid: false, icon: '',   tooltip: '空气' });
+        BlockRegistry.register('dirt',     { color: '#8B6F47',           solid: true,  icon: '土',   tooltip: '泥土',     uiColor: '#8B4513' });
+        BlockRegistry.register('stone',    { color: '#7a7a85',           solid: true,  icon: '石',   tooltip: '石头',     uiColor: '#708090' });
+        BlockRegistry.register('grass',    { color: '#4a8c3f',           solid: true,  icon: '草',   tooltip: '草',       uiColor: '#228B22' });
+        BlockRegistry.register('wood',     { color: '#a07040',           solid: true,  icon: '木',   tooltip: '木头',     uiColor: '#D2691E' });
+        BlockRegistry.register('sand',     { color: '#d4b896',           solid: true,  icon: '沙',   tooltip: '沙子',     uiColor: '#FFD700' });
+        BlockRegistry.register('water',    { color: 'rgba(65,105,225,0.6)', solid: false, icon: '水',   tooltip: '水',       uiColor: '#4169E1' });
+        BlockRegistry.register('platform', { color: '#C4956A',           solid: true,  icon: '台',   tooltip: '平台',     uiColor: '#C4956A' });
+        console.log('[app] 方块注册完成:', BlockRegistry.getAllPlaceable().join(', '));
+
+        window.App = App;
+
     })();
     </script>
-</body>
+
+    <script>
+    // ============================================================
+    //  MODULE: TextureGenerator（与主代码解耦）
+    // ============================================================
+    // ============================================================
+    //  MODULE: TextureGenerator
+    // ============================================================
+    const TextureGenerator = {
+        atlasCanvas: null,
+        atlasCtx: null,
+        atlasTexture: null,
+        tileSize: 32,
+        atlasWidth: 224, // 7 * 32
+        atlasHeight: 32,
+
+        init() {
+            this.atlasCanvas = document.createElement('canvas');
+            this.atlasCanvas.width = this.atlasWidth;
+            this.atlasCanvas.height = this.atlasHeight;
+            this.atlasCtx = this.atlasCanvas.getContext('2d');
+            console.log('[texture] 图集生成器初始化');
+        },
+
+        generate(type) {
+            const s = this.tileSize;
+            const c = document.createElement('canvas');
+            c.width = s;
+            c.height = s;
+            const ctx = c.getContext('2d');
+            const data = window.BlockRegistry.get(type);
+            if (!data) return c;
+
+            // 基底
+            ctx.fillStyle = data.color;
+            ctx.fillRect(0, 0, s, s);
+
+            // 通用边框（除 platform/water 外）
+            if (type !== 'platform' && type !== 'water') {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                ctx.fillRect(0, 0, s, 2);
+                ctx.fillRect(0, 0, 2, s);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                ctx.fillRect(s - 2, 0, 2, s);
+                ctx.fillRect(0, s - 2, s, 2);
+                if (type === 'dirt' || type === 'grass') {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                    ctx.fillRect(8, 12, 4, 4);
+                    ctx.fillRect(20, 6, 3, 3);
+                }
+            }
+
+            // platform：32x32 贴图，下方 24px 透明
+            if (type === 'platform') {
+                ctx.clearRect(0, 0, s, s);
+                const platH = 8;
+                const r = 8;
+                ctx.fillStyle = '#C4956A';
+                ctx.beginPath();
+                ctx.moveTo(r, 0);
+                ctx.lineTo(s - r, 0);
+                ctx.quadraticCurveTo(s, 0, s, r);
+                ctx.lineTo(s, platH - r);
+                ctx.quadraticCurveTo(s, platH, s - r, platH);
+                ctx.lineTo(r, platH);
+                ctx.quadraticCurveTo(0, platH, 0, platH - r);
+                ctx.lineTo(0, r);
+                ctx.quadraticCurveTo(0, 0, r, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#A07850';
+                ctx.fillRect(r, 0, s - r * 2, 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.fillRect(0, 0, r, platH);
+                ctx.fillRect(s - r, 0, r, platH);
+                ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                ctx.fillRect(10, 3, 6, 1);
+                ctx.fillRect(20, 5, 8, 1);
+                ctx.fillRect(6, 7, 10, 1);
+                ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                ctx.fillRect(r, platH - 1, s - r * 2, 1);
+            }
+
+            // water：静态蓝底 + 顶部高光条
+            if (type === 'water') {
+                ctx.fillStyle = 'rgba(65, 105, 225, 0.6)';
+                ctx.fillRect(0, 0, s, s);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fillRect(0, 0, s, 2);
+            }
+
+            return c;
+        },
+
+        buildAtlas() {
+            const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water'];
+            const s = this.tileSize;
+            this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
+            types.forEach((type, i) => {
+                const tile = this.generate(type);
+                this.atlasCtx.drawImage(tile, i * s, 0);
+                const data = window.BlockRegistry.get(type);
+                if (data) data.tileIndex = i;
+            });
+            console.log('[texture] 图集构建完成:', types.join(', '));
+            return this.atlasCanvas;
+        },
+
+        getTexture() {
+            if (!this.atlasTexture) {
+                this.atlasTexture = new THREE.CanvasTexture(this.atlasCanvas);
+                this.atlasTexture.magFilter = THREE.NearestFilter;
+                this.atlasTexture.minFilter = THREE.NearestFilter;
+            }
+            return this.atlasTexture;
+        },
+
+        preview() {
+            const url = this.atlasCanvas.toDataURL();
+            const div = document.createElement('div');
+            div.style.cssText = 'position:fixed;top:60px;left:12px;z-index:9998;background:#1e1e1e;border:2px solid #444;padding:8px;border-radius:4px;cursor:pointer;';
+            const img = document.createElement('img');
+            img.src = url;
+            img.style.cssText = 'image-rendering:pixelated;width:224px;height:32px;';
+            div.appendChild(img);
+            const label = document.createElement('div');
+            label.textContent = '图集预览 (224x32) 点击关闭';
+            label.style.cssText = 'color:#888;font-size:11px;margin-top:4px;text-align:center;';
+            div.appendChild(label);
+            div.addEventListener('click', () => div.remove());
+            document.body.appendChild(div);
+            console.log('[texture] 预览已显示，点击关闭');
+            return url;
+        }
+    };
+
+
+
+    // 初始化纹理图集，然后启动主应用
+    TextureGenerator.init();
+    TextureGenerator.buildAtlas();
+    window.__ATLAS_TEXTURE = TextureGenerator.getTexture();
+    if (window.App) window.App.init();
+    else console.error('[texture] App 未定义，无法启动');
+    </script>
+
+
 </html>
