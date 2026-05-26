@@ -50,6 +50,76 @@
         #consoleInput { flex: 1; background: transparent; border: none; outline: none; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 13px; }
         #consoleInput::placeholder { color: #555; }
     </style>
+    <style>
+        #errorOverlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85); z-index: 99999;
+            display: none; align-items: center; justify-content: center;
+            font-family: 'Courier New', monospace;
+        }
+        #errorBox {
+            background: #1e1e2e; border: 2px solid #ff4444; border-radius: 8px;
+            max-width: 90vw; max-height: 80vh; width: 600px;
+            display: flex; flex-direction: column;
+        }
+        #errorTitle {
+            background: #ff4444; color: #fff; padding: 10px 16px;
+            font-size: 14px; font-weight: bold; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        #errorClose {
+            cursor: pointer; font-size: 18px; padding: 0 4px;
+        }
+        #errorBody {
+            padding: 16px; color: #ff8888; font-size: 12px;
+            line-height: 1.6; overflow-y: auto; max-height: 60vh;
+            white-space: pre-wrap; word-break: break-all;
+        }
+    </style>
+    <div id="errorOverlay">
+        <div id="errorBox">
+            <div id="errorTitle">
+                <span>⚠ 游戏初始化错误</span>
+                <span id="errorClose">✕</span>
+            </div>
+            <div id="errorBody"></div>
+        </div>
+    </div>
+    <script>
+    // 全局错误弹窗：页面内 DOM，不阻塞
+    (function() {
+        var overlay = document.getElementById('errorOverlay');
+        var body = document.getElementById('errorBody');
+        var closeBtn = document.getElementById('errorClose');
+        window.__ERRORS = [];
+        function showError(text) {
+            window.__ERRORS.push(text);
+            if (body) {
+                body.textContent += (body.textContent ? '\n\n---\n\n' : '') + text;
+                overlay.style.display = 'flex';
+            }
+        }
+        if (closeBtn) closeBtn.addEventListener('click', function() {
+            overlay.style.display = 'none';
+        });
+        window.onerror = function(msg, url, line, col, err) {
+            var text = '[ERROR] ' + msg + '\n@ ' + (url || '?') + ':' + line + ':' + col;
+            if (err && err.stack) text += '\n' + err.stack;
+            showError(text);
+            return false;
+        };
+        window.addEventListener('error', function(e) {
+            var text = '[ERROR] ' + e.message;
+            if (e.error && e.error.stack) text += '\n' + e.error.stack;
+            showError(text);
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            var text = '[UNHANDLED REJECTION] ' + e.reason;
+            if (e.reason && e.reason.stack) text += '\n' + e.reason.stack;
+            showError(text);
+        });
+    })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <base target="_blank">
 </head>
@@ -92,6 +162,184 @@
     <script>
     (function() {
         "use strict";
+
+        // ============================================================
+        //  MODULE: ConsoleModule
+        // ============================================================
+        const ConsoleModule = {
+            autoScroll: true,
+            history: [],
+            historyIndex: -1,
+            lastToggleTime: 0,
+            touchActive: false,
+            lastTouchY: 0,
+            lastScrollTop: -1,
+
+            init() {
+                const panel   = DOM.consolePanel;
+                const content = DOM.consoleContent;
+                const input   = DOM.consoleInput;
+                const header  = DOM.consoleHeader;
+                const autoBtn = DOM.consoleAuto;
+                const clearBtn= DOM.consoleClear;
+                const toggle  = DOM.consoleToggle;
+
+                if (!panel || !content || !input || !header || !autoBtn || !clearBtn || !toggle) {
+                    console.error('[console] 控制台 DOM 元素缺失，跳过初始化');
+                    return;
+                }
+
+                const origLog   = console.log;
+                const origWarn  = console.warn;
+                const origError = console.error;
+                const origInfo  = console.info;
+                console.__orig = { log: origLog, warn: origWarn, error: origError, info: origInfo };
+
+                console.log   = (...args) => { origLog.apply(this, args);   this.appendLine('log',   this.stringifyArgs(args)); };
+                console.warn  = (...args) => { origWarn.apply(this, args);  this.appendLine('warn',  this.stringifyArgs(args)); };
+                console.error = (...args) => { origError.apply(this, args); this.appendLine('error', this.stringifyArgs(args)); };
+                console.info  = (...args) => { origInfo.apply(this, args);  this.appendLine('info',  this.stringifyArgs(args)); };
+
+                window.onerror = (msg, url, line, col, err) => {
+                    const text = err && err.stack ? err.stack : (msg + ' at ' + (url || '?') + ':' + line + ':' + col);
+                    this.appendLine('error', text);
+                    return false;
+                };
+                window.addEventListener('error', (e) => {
+                    if (e.error && e.error.stack) this.appendLine('error', e.error.stack);
+                    else this.appendLine('error', e.message + ' at ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno);
+                });
+                window.addEventListener('unhandledrejection', (e) => {
+                    const reason = e.reason;
+                    if (reason instanceof Error) this.appendLine('error', 'Unhandled Promise Rejection: ' + (reason.stack || reason.message));
+                    else this.appendLine('error', 'Unhandled Promise Rejection: ' + String(reason));
+                });
+
+                content.addEventListener('touchstart', (e) => {
+                    this.touchActive = true;
+                    this.lastTouchY = e.touches[0].clientY;
+                    this.lastScrollTop = content.scrollTop;
+                }, { passive: true });
+                content.addEventListener('touchmove', (e) => {
+                    if (!this.touchActive) return;
+                    const y = e.touches[0].clientY;
+                    const st = content.scrollTop;
+                    if (st !== this.lastScrollTop || Math.abs(y - this.lastTouchY) > 20) {
+                        this.lastTouchY = y;
+                        this.lastScrollTop = st;
+                    }
+                }, { passive: true });
+                content.addEventListener('touchend', () => { this.touchActive = false; }, { passive: true });
+
+                const togglePanel = () => {
+                    const isCollapsed = panel.classList.toggle('collapsed');
+                    console.log('[console] 控制台' + (isCollapsed ? '收起' : '展开'));
+                };
+                header.addEventListener('pointerdown', (e) => {
+                    if (['consoleClear', 'consoleToggle', 'consoleAuto', 'consoleCopy'].includes(e.target.id)) return;
+                    togglePanel();
+                });
+                toggle.addEventListener('pointerdown', (e) => { e.stopPropagation(); togglePanel(); });
+
+                const copyBtn = document.getElementById('consoleCopy');
+                if (copyBtn) {
+                    copyBtn.addEventListener('pointerdown', (e) => {
+                        e.stopPropagation();
+                        const text = Array.from(content.children).map(div => div.textContent).join('\n');
+                        if (text && navigator.clipboard) {
+                            navigator.clipboard.writeText(text).then(() => {
+                                const old = copyBtn.textContent;
+                                copyBtn.textContent = '已复制';
+                                setTimeout(() => copyBtn.textContent = old, 800);
+                            }).catch(() => { this.appendLine('warn', '复制失败'); });
+                        } else { this.appendLine('warn', '无内容可复制或剪贴板不可用'); }
+                    });
+                }
+
+                clearBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); content.innerHTML = ''; console.log('[console] 已清空'); });
+
+                autoBtn.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    const now = Date.now();
+                    if (now - this.lastToggleTime < 300) return;
+                    this.lastToggleTime = now;
+                    this.autoScroll = !this.autoScroll;
+                    autoBtn.classList.toggle('auto-on', this.autoScroll);
+                    autoBtn.classList.toggle('auto-off', !this.autoScroll);
+                    if (this.autoScroll) content.scrollTop = content.scrollHeight;
+                    console.log('[console] 自动滚动' + (this.autoScroll ? '开启' : '关闭'));
+                });
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.keyCode === 13) {
+                        e.preventDefault();
+                        this.executeInput();
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (this.historyIndex > 0) { this.historyIndex--; input.value = this.history[this.historyIndex]; }
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (this.historyIndex < this.history.length - 1) { this.historyIndex++; input.value = this.history[this.historyIndex]; }
+                        else { this.historyIndex = this.history.length; input.value = ''; }
+                    }
+                });
+                input.addEventListener('change', () => { if (input.value.trim()) this.executeInput(); });
+
+                this.appendLine('info', '控制台就绪。输入 JS 代码按回车执行。');
+                console.log('[console] 控制台初始化完成');
+            },
+
+            nowTime() {
+                const d = new Date();
+                const pad = (n) => n.toString().padStart(2, '0');
+                return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+            },
+
+            appendLine(type, text) {
+                try {
+                    const div = document.createElement('div');
+                    div.className = 'log-line log-' + type;
+                    div.innerHTML = '<span class="log-time">' + this.nowTime() + '</span>' + this.escapeHtml(String(text));
+                    DOM.consoleContent.appendChild(div);
+                    if (this.autoScroll) DOM.consoleContent.scrollTop = DOM.consoleContent.scrollHeight;
+                } catch (e) {
+                    const orig = console.__orig || console;
+                    orig.error('[console] appendLine 失败:', e);
+                }
+            },
+
+            escapeHtml(str) {
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            },
+
+            stringifyArgs(args) {
+                return args.map(arg => {
+                    if (arg === null) return 'null';
+                    if (arg === undefined) return 'undefined';
+                    if (typeof arg === 'string') return arg;
+                    if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
+                    if (arg instanceof Error) return arg.stack || arg.message || String(arg);
+                    try { return JSON.stringify(arg, null, 2); } catch (e) { return String(arg); }
+                }).join(' ');
+            },
+
+            executeInput() {
+                const code = DOM.consoleInput.value.trim();
+                if (!code) return;
+                this.history.push(code);
+                this.historyIndex = this.history.length;
+                this.appendLine('info', '> ' + code);
+                try {
+                    const result = eval(code);
+                    if (result !== undefined) this.appendLine('log', this.stringifyArgs([result]));
+                } catch (err) {
+                    this.appendLine('error', err.stack || err.message || String(err));
+                }
+                DOM.consoleInput.value = '';
+                DOM.consoleInput.blur();
+            }
+        };
+
 
         // ============================================================
         //  MODULE: Config
@@ -221,58 +469,31 @@
                 const maxCount = CONFIG.WORLD_WIDTH * CONFIG.WORLD_HEIGHT;
                 const geo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
 
-                // 统一地形 ShaderMaterial：图集 + 水波动
+                // 固体地形：图集（不含水）
                 const atlas = window.__ATLAS_TEXTURE || new THREE.Texture();
                 const terrainShader = {
                     uniforms: {
-                        uTime: { value: 0.0 },
                         uAtlas: { value: atlas }
                     },
                     vertexShader: `
-                        uniform float uTime;
                         attribute float aTileIndex;
                         varying vec2 vUv;
                         varying float vTileIndex;
-                        varying float vWorldX;
-                        varying float vWorldY;
                         void main() {
                             vUv = uv;
                             vTileIndex = aTileIndex;
-                            float worldX = instanceMatrix[3][0];
-                            float worldY = instanceMatrix[3][1];
-                            vWorldX = worldX / 32.0;
-                            vWorldY = worldY / 32.0;
-                            vec3 pos = position;
-                            // water 波动（tileIndex 6）
-                            if (aTileIndex == 6.0) {
-                                float wave = sin(uTime * 2.0 + vWorldX * 0.5) * 2.0;
-                                pos.y += wave;
-                            }
-                            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+                            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
                         }
                     `,
                     fragmentShader: `
-                        uniform float uTime;
                         uniform sampler2D uAtlas;
                         varying vec2 vUv;
                         varying float vTileIndex;
-                        varying float vWorldX;
-                        varying float vWorldY;
                         void main() {
-                            // UV 内缩 0.05：vUv [0,1] → [0.05, 0.95]，消除图集粘连
+                            // UV 内缩 0.05：消除图集粘连
                             vec2 innerUv = clamp(vUv, 0.05, 0.95);
                             vec2 atlasUv = vec2((vTileIndex + innerUv.x) / 7.0, innerUv.y);
-                            vec4 tex = texture2D(uAtlas, atlasUv);
-                            if (vTileIndex == 6.0) {
-                                // water 动态 alpha + 高光
-                                float alpha = 0.5 + sin(uTime * 3.0 + vWorldX * 0.7 + vWorldY * 0.5) * 0.15;
-                                float hl = 0.1 + sin(uTime * 4.0 + vWorldX) * 0.05;
-                                float isTop = step(0.9375, vUv.y);
-                                vec3 color = mix(tex.rgb, vec3(1.0, 1.0, 1.0), isTop * hl);
-                                gl_FragColor = vec4(color, alpha);
-                            } else {
-                                gl_FragColor = tex;
-                            }
+                            gl_FragColor = texture2D(uAtlas, atlasUv);
                         }
                     `
                 };
@@ -285,13 +506,62 @@
                     depthWrite: false
                 });
                 this.terrainMesh = new THREE.InstancedMesh(geo, terrainMat, maxCount);
-                this.terrainMesh.renderOrder = 0;
                 this.terrainMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-                // aTileIndex 实例属性
+                this.terrainMesh.renderOrder = 0;
                 const tileIndices = new Float32Array(maxCount);
                 this.terrainMesh.geometry.setAttribute('aTileIndex', new THREE.InstancedBufferAttribute(tileIndices, 1));
                 this.scene.add(this.terrainMesh);
-                this.terrainUniforms = terrainShader.uniforms;
+
+                // 水：独立 Mesh，renderOrder 1.5（覆盖玩家）
+                const waterShader = {
+                    uniforms: {
+                        uTime: { value: 0.0 }
+                    },
+                    vertexShader: `
+                        uniform float uTime;
+                        varying vec2 vUv;
+                        varying float vWorldX;
+                        varying float vWorldY;
+                        void main() {
+                            vUv = uv;
+                            float worldX = instanceMatrix[3][0];
+                            float worldY = instanceMatrix[3][1];
+                            vWorldX = worldX / 32.0;
+                            vWorldY = worldY / 32.0;
+                            vec3 pos = position;
+                            float wave = sin(uTime * 2.0 + vWorldX * 0.5) * 2.0;
+                            pos.y += wave;
+                            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float uTime;
+                        varying vec2 vUv;
+                        varying float vWorldX;
+                        varying float vWorldY;
+                        void main() {
+                            vec3 baseColor = vec3(0.255, 0.412, 0.882);
+                            float alpha = 0.5 + sin(uTime * 3.0 + vWorldX * 0.7 + vWorldY * 0.5) * 0.15;
+                            float hl = 0.1 + sin(uTime * 4.0 + vWorldX) * 0.05;
+                            float isTop = step(0.9375, vUv.y);
+                            vec3 color = mix(baseColor, vec3(1.0, 1.0, 1.0), isTop * hl);
+                            gl_FragColor = vec4(color, alpha);
+                        }
+                    `
+                };
+                const waterMat = new THREE.ShaderMaterial({
+                    uniforms: waterShader.uniforms,
+                    vertexShader: waterShader.vertexShader,
+                    fragmentShader: waterShader.fragmentShader,
+                    transparent: true,
+                    depthTest: false,
+                    depthWrite: false
+                });
+                this.waterMesh = new THREE.InstancedMesh(geo, waterMat, maxCount);
+                this.waterMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                this.waterMesh.renderOrder = 1.5;
+                this.scene.add(this.waterMesh);
+                this.waterUniforms = waterShader.uniforms;
 
                 for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
                     this.instanceMap[x] = [];
@@ -331,23 +601,19 @@
                 const W = CONFIG.WORLD_WIDTH;
                 const H = CONFIG.WORLD_HEIGHT;
                 let count = 0;
+                let waterCount = 0;
+                const texIndexAttr = this.terrainMesh.geometry.attributes.aTileIndex;
 
                 // 全部隐藏
                 for (let i = 0; i < this.terrainMesh.count; i++) {
                     this.terrainMesh.setMatrixAt(i, this._matrixHide);
                 }
                 this.terrainMesh.instanceMatrix.needsUpdate = true;
-                const tileIndexAttr = this.terrainMesh.geometry.attributes.aTileIndex;
 
                 for (let x = 0; x < W; x++) {
                     for (let y = 0; y < H; y++) {
                         const block = State.world[x][y];
                         if (block === 'air' || !block) {
-                            this.instanceMap[x][y] = null;
-                            continue;
-                        }
-                        const data = BlockRegistry.get(block);
-                        if (!data || data.tileIndex === undefined) {
                             this.instanceMap[x][y] = null;
                             continue;
                         }
@@ -357,33 +623,47 @@
                         this.dummy.position.set(px, py, 0);
                         this.dummy.updateMatrix();
 
-                        this.terrainMesh.setMatrixAt(count, this.dummy.matrix);
-                        tileIndexAttr.setX(count, data.tileIndex);
-                        this.instanceMap[x][y] = { index: count, type: block };
-                        count++;
+                        if (block === 'water') {
+                            this.waterMesh.setMatrixAt(waterCount, this.dummy.matrix);
+                            this.instanceMap[x][y] = { index: waterCount, type: 'water', mesh: 'water' };
+                            waterCount++;
+                        } else {
+                            const data = BlockRegistry.get(block);
+                            if (!data || data.tileIndex === undefined) {
+                                this.instanceMap[x][y] = null;
+                                continue;
+                            }
+                            this.terrainMesh.setMatrixAt(count, this.dummy.matrix);
+                            texIndexAttr.setX(count, data.tileIndex);
+                            this.instanceMap[x][y] = { index: count, type: block, mesh: 'terrain' };
+                            count++;
+                        }
                     }
                 }
 
                 this.terrainMesh.count = count;
                 this.terrainMesh.instanceMatrix.needsUpdate = true;
-                tileIndexAttr.needsUpdate = true;
-                console.log('[three] 世界构建完成，实例数:', count);
+                texIndexAttr.needsUpdate = true;
+                this.waterMesh.count = waterCount;
+                this.waterMesh.instanceMatrix.needsUpdate = true;
+                console.log('[three] 世界构建完成，固体:', count, '水:', waterCount);console.log('[three] 世界构建完成，实例数:', count);
             },
 
             updateBlock(x, y, oldType, newType) {
                 const ts = CONFIG.TILE_SIZE;
                 const info = this.instanceMap[x][y];
-                const tileIndexAttr = this.terrainMesh.geometry.attributes.aTileIndex;
-
+                // 隐藏旧方块
                 if (oldType && oldType !== 'air' && info) {
-                    this.terrainMesh.setMatrixAt(info.index, this._matrixHide);
-                    this.terrainMesh.instanceMatrix.needsUpdate = true;
+                    if (info.mesh === 'water') {
+                        this.waterMesh.setMatrixAt(info.index, this._matrixHide);
+                        this.waterMesh.instanceMatrix.needsUpdate = true;
+                    } else {
+                        this.terrainMesh.setMatrixAt(info.index, this._matrixHide);
+                        this.terrainMesh.instanceMatrix.needsUpdate = true;
+                    }
                 }
 
                 if (newType && newType !== 'air') {
-                    const data = BlockRegistry.get(newType);
-                    if (!data || data.tileIndex === undefined) return;
-
                     const px = x * ts + ts / 2;
                     const py = y * ts + ts / 2;
                     this.dummy.position.set(px, py, 0);
@@ -391,19 +671,33 @@
                     this.dummy.scale.set(1, 1, 1);
                     this.dummy.updateMatrix();
 
-                    let idx;
-                    if (info) {
-                        idx = info.index;
+                    if (newType === 'water') {
+                        let idx;
+                        if (info && info.mesh === 'water') {
+                            idx = info.index;
+                        } else {
+                            idx = this.waterMesh.count;
+                            this.waterMesh.count = idx + 1;
+                        }
+                        this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
+                        this.waterMesh.instanceMatrix.needsUpdate = true;
+                        this.instanceMap[x][y] = { index: idx, type: 'water', mesh: 'water' };
                     } else {
-                        idx = this.terrainMesh.count;
-                        this.terrainMesh.count = idx + 1;
+                        const data = BlockRegistry.get(newType);
+                        if (!data || data.tileIndex === undefined) return;
+                        let idx;
+                        if (info && info.mesh === 'terrain') {
+                            idx = info.index;
+                        } else {
+                            idx = this.terrainMesh.count;
+                            this.terrainMesh.count = idx + 1;
+                        }
+                        this.terrainMesh.setMatrixAt(idx, this.dummy.matrix);
+                        this.terrainMesh.geometry.attributes.aTileIndex.setX(idx, data.tileIndex);
+                        this.terrainMesh.instanceMatrix.needsUpdate = true;
+                        this.terrainMesh.geometry.attributes.aTileIndex.needsUpdate = true;
+                        this.instanceMap[x][y] = { index: idx, type: newType, mesh: 'terrain' };
                     }
-
-                    this.terrainMesh.setMatrixAt(idx, this.dummy.matrix);
-                    tileIndexAttr.setX(idx, data.tileIndex);
-                    this.terrainMesh.instanceMatrix.needsUpdate = true;
-                    tileIndexAttr.needsUpdate = true;
-                    this.instanceMap[x][y] = { index: idx, type: newType };
                 } else {
                     this.instanceMap[x][y] = null;
                 }
@@ -438,8 +732,8 @@
             },
 
             updateWater() {
-                if (this.terrainUniforms) {
-                    this.terrainUniforms.uTime.value = performance.now() / 1000.0;
+                if (this.waterUniforms) {
+                    this.waterUniforms.uTime.value = performance.now() / 1000.0;
                 }
             },
 
@@ -697,8 +991,9 @@
                 this.tool.position.set(0, 0, 0);
                 this.group.add(this.tool);
 
-                this.group.renderOrder = 1;
+                this.group.renderOrder = 0;
                 this.group.traverse(child => {
+                    child.renderOrder = 0;
                     if (child.isMesh) {
                         child.material.transparent = true;
                         child.material.depthTest = false;
@@ -1141,183 +1436,6 @@
         };
 
         // ============================================================
-        //  MODULE: ConsoleModule
-        // ============================================================
-        const ConsoleModule = {
-            autoScroll: true,
-            history: [],
-            historyIndex: -1,
-            lastToggleTime: 0,
-            touchActive: false,
-            lastTouchY: 0,
-            lastScrollTop: -1,
-
-            init() {
-                const panel   = DOM.consolePanel;
-                const content = DOM.consoleContent;
-                const input   = DOM.consoleInput;
-                const header  = DOM.consoleHeader;
-                const autoBtn = DOM.consoleAuto;
-                const clearBtn= DOM.consoleClear;
-                const toggle  = DOM.consoleToggle;
-
-                if (!panel || !content || !input || !header || !autoBtn || !clearBtn || !toggle) {
-                    console.error('[console] 控制台 DOM 元素缺失，跳过初始化');
-                    return;
-                }
-
-                const origLog   = console.log;
-                const origWarn  = console.warn;
-                const origError = console.error;
-                const origInfo  = console.info;
-                console.__orig = { log: origLog, warn: origWarn, error: origError, info: origInfo };
-
-                console.log   = (...args) => { origLog.apply(this, args);   this.appendLine('log',   this.stringifyArgs(args)); };
-                console.warn  = (...args) => { origWarn.apply(this, args);  this.appendLine('warn',  this.stringifyArgs(args)); };
-                console.error = (...args) => { origError.apply(this, args); this.appendLine('error', this.stringifyArgs(args)); };
-                console.info  = (...args) => { origInfo.apply(this, args);  this.appendLine('info',  this.stringifyArgs(args)); };
-
-                window.onerror = (msg, url, line, col, err) => {
-                    const text = err && err.stack ? err.stack : (msg + ' at ' + (url || '?') + ':' + line + ':' + col);
-                    this.appendLine('error', text);
-                    return false;
-                };
-                window.addEventListener('error', (e) => {
-                    if (e.error && e.error.stack) this.appendLine('error', e.error.stack);
-                    else this.appendLine('error', e.message + ' at ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno);
-                });
-                window.addEventListener('unhandledrejection', (e) => {
-                    const reason = e.reason;
-                    if (reason instanceof Error) this.appendLine('error', 'Unhandled Promise Rejection: ' + (reason.stack || reason.message));
-                    else this.appendLine('error', 'Unhandled Promise Rejection: ' + String(reason));
-                });
-
-                content.addEventListener('touchstart', (e) => {
-                    this.touchActive = true;
-                    this.lastTouchY = e.touches[0].clientY;
-                    this.lastScrollTop = content.scrollTop;
-                }, { passive: true });
-                content.addEventListener('touchmove', (e) => {
-                    if (!this.touchActive) return;
-                    const y = e.touches[0].clientY;
-                    const st = content.scrollTop;
-                    if (st !== this.lastScrollTop || Math.abs(y - this.lastTouchY) > 20) {
-                        this.lastTouchY = y;
-                        this.lastScrollTop = st;
-                    }
-                }, { passive: true });
-                content.addEventListener('touchend', () => { this.touchActive = false; }, { passive: true });
-
-                const togglePanel = () => {
-                    const isCollapsed = panel.classList.toggle('collapsed');
-                    console.log('[console] 控制台' + (isCollapsed ? '收起' : '展开'));
-                };
-                header.addEventListener('pointerdown', (e) => {
-                    if (['consoleClear', 'consoleToggle', 'consoleAuto', 'consoleCopy'].includes(e.target.id)) return;
-                    togglePanel();
-                });
-                toggle.addEventListener('pointerdown', (e) => { e.stopPropagation(); togglePanel(); });
-
-                const copyBtn = document.getElementById('consoleCopy');
-                if (copyBtn) {
-                    copyBtn.addEventListener('pointerdown', (e) => {
-                        e.stopPropagation();
-                        const text = Array.from(content.children).map(div => div.textContent).join('\n');
-                        if (text && navigator.clipboard) {
-                            navigator.clipboard.writeText(text).then(() => {
-                                const old = copyBtn.textContent;
-                                copyBtn.textContent = '已复制';
-                                setTimeout(() => copyBtn.textContent = old, 800);
-                            }).catch(() => { this.appendLine('warn', '复制失败'); });
-                        } else { this.appendLine('warn', '无内容可复制或剪贴板不可用'); }
-                    });
-                }
-
-                clearBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); content.innerHTML = ''; console.log('[console] 已清空'); });
-
-                autoBtn.addEventListener('pointerdown', (e) => {
-                    e.stopPropagation();
-                    const now = Date.now();
-                    if (now - this.lastToggleTime < 300) return;
-                    this.lastToggleTime = now;
-                    this.autoScroll = !this.autoScroll;
-                    autoBtn.classList.toggle('auto-on', this.autoScroll);
-                    autoBtn.classList.toggle('auto-off', !this.autoScroll);
-                    if (this.autoScroll) content.scrollTop = content.scrollHeight;
-                    console.log('[console] 自动滚动' + (this.autoScroll ? '开启' : '关闭'));
-                });
-
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.keyCode === 13) {
-                        e.preventDefault();
-                        this.executeInput();
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        if (this.historyIndex > 0) { this.historyIndex--; input.value = this.history[this.historyIndex]; }
-                    } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        if (this.historyIndex < this.history.length - 1) { this.historyIndex++; input.value = this.history[this.historyIndex]; }
-                        else { this.historyIndex = this.history.length; input.value = ''; }
-                    }
-                });
-                input.addEventListener('change', () => { if (input.value.trim()) this.executeInput(); });
-
-                this.appendLine('info', '控制台就绪。输入 JS 代码按回车执行。');
-                console.log('[console] 控制台初始化完成');
-            },
-
-            nowTime() {
-                const d = new Date();
-                const pad = (n) => n.toString().padStart(2, '0');
-                return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-            },
-
-            appendLine(type, text) {
-                try {
-                    const div = document.createElement('div');
-                    div.className = 'log-line log-' + type;
-                    div.innerHTML = '<span class="log-time">' + this.nowTime() + '</span>' + this.escapeHtml(String(text));
-                    DOM.consoleContent.appendChild(div);
-                    if (this.autoScroll) DOM.consoleContent.scrollTop = DOM.consoleContent.scrollHeight;
-                } catch (e) {
-                    const orig = console.__orig || console;
-                    orig.error('[console] appendLine 失败:', e);
-                }
-            },
-
-            escapeHtml(str) {
-                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            },
-
-            stringifyArgs(args) {
-                return args.map(arg => {
-                    if (arg === null) return 'null';
-                    if (arg === undefined) return 'undefined';
-                    if (typeof arg === 'string') return arg;
-                    if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
-                    if (arg instanceof Error) return arg.stack || arg.message || String(arg);
-                    try { return JSON.stringify(arg, null, 2); } catch (e) { return String(arg); }
-                }).join(' ');
-            },
-
-            executeInput() {
-                const code = DOM.consoleInput.value.trim();
-                if (!code) return;
-                this.history.push(code);
-                this.historyIndex = this.history.length;
-                this.appendLine('info', '> ' + code);
-                try {
-                    const result = eval(code);
-                    if (result !== undefined) this.appendLine('log', this.stringifyArgs([result]));
-                } catch (err) {
-                    this.appendLine('error', err.stack || err.message || String(err));
-                }
-                DOM.consoleInput.value = '';
-                DOM.consoleInput.blur();
-            }
-        };
-
-        // ============================================================
         //  MODULE: GameLoop
         // ============================================================
         const GameLoop = {
@@ -1383,6 +1501,7 @@
                     selector.appendChild(btn);
                 });
 
+                ConsoleModule.init();
                 ThreeJSRenderer.init();
                 World.init();
                 ThreeJSRenderer.buildWorld();
@@ -1390,7 +1509,6 @@
 
                 Input.init();
                 Fullscreen.init();
-                ConsoleModule.init();
                 GameLoop.start();
                 // 设备检测：PC 隐藏操作 GUI
                 const isMobile = window.matchMedia('(pointer: coarse)').matches;
