@@ -1422,9 +1422,9 @@
                         if (y >= surface) {
                             block = 'air';
                         } else if (depth < grassDepth) {
-                            block = isDesert ? 'sand' : (isSnow ? 'ice' : 'grass');
+                            block = isDesert ? 'sand' : (isSnow ? 'snow' : 'grass');
                         } else if (depth < grassDepth + dirtDepth) {
-                            block = isDesert ? 'sand' : 'dirt';
+                            block = isDesert ? 'sandstone' : 'dirt';
                         } else {
                             block = 'stone';
                         }
@@ -2453,6 +2453,8 @@
         BlockRegistry.register('water',    { color: 'rgba(65,105,225,0.6)', solid: false, icon: '水',   tooltip: '水',       uiColor: '#4169E1' });
         BlockRegistry.register('platform', { color: '#C4956A',           solid: true,  icon: '台',   tooltip: '平台',     uiColor: '#C4956A' });
         BlockRegistry.register('ice',      { color: '#ADD8E6',           solid: true,  icon: '冰',   tooltip: '冰',       uiColor: '#ADD8E6', friction: 0.98 });
+        BlockRegistry.register('snow',     { color: '#FFFAFA',           solid: true,  icon: '雪',   tooltip: '雪',       uiColor: '#FFFAFA' });
+        BlockRegistry.register('sandstone',{ color: '#C2B280',           solid: true,  icon: '岩',   tooltip: '砂岩',     uiColor: '#C2B280' });
         console.log('[app] 方块注册完成:', BlockRegistry.getAllPlaceable().join(', '));
 
         window.App = App;
@@ -2546,11 +2548,11 @@
                 ctx.fillRect(0, 0, s, 2);
             }
 
-            // ice：浅蓝 + 白色高光条纹
+            // ice：偏蓝，降低亮度
             if (type === 'ice') {
                 ctx.fillStyle = '#ADD8E6';
                 ctx.fillRect(0, 0, s, s);
-                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
                 ctx.fillRect(4, 4, 8, 2);
                 ctx.fillRect(16, 12, 10, 2);
                 ctx.fillRect(8, 20, 6, 2);
@@ -2563,11 +2565,44 @@
                 ctx.fillRect(0, s-1, s, 1);
             }
 
+            // snow：比 ice 稍白
+            if (type === 'snow') {
+                ctx.fillStyle = '#E0E8F0';
+                ctx.fillRect(0, 0, s, s);
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.fillRect(2, 2, 6, 2);
+                ctx.fillRect(12, 8, 8, 2);
+                ctx.fillRect(6, 16, 5, 2);
+                ctx.fillRect(20, 22, 4, 2);
+                ctx.fillStyle = 'rgba(200,220,240,0.3)';
+                ctx.fillRect(0, s-3, s, 3);
+                ctx.fillStyle = 'rgba(0,0,0,0.05)';
+                ctx.fillRect(0, 0, s, 1);
+                ctx.fillRect(0, 0, 1, s);
+            }
+
+            // sandstone：砂岩，偏黄棕
+            if (type === 'sandstone') {
+                ctx.fillStyle = '#C2B280';
+                ctx.fillRect(0, 0, s, s);
+                ctx.fillStyle = 'rgba(160,140,80,0.3)';
+                ctx.fillRect(0, 8, s, 2);
+                ctx.fillRect(0, 20, s, 2);
+                ctx.fillRect(8, 0, 2, s);
+                ctx.fillRect(22, 0, 2, s);
+                ctx.fillStyle = 'rgba(0,0,0,0.08)';
+                ctx.fillRect(0, 0, s, 1);
+                ctx.fillRect(0, 0, 1, s);
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.fillRect(s-1, 0, 1, s);
+                ctx.fillRect(0, s-1, s, 1);
+            }
+
             return c;
         },
 
         buildAtlas() {
-            const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water', 'ice'];
+            const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water', 'ice', 'snow', 'sandstone'];
             const s = this.tileSize;
             const tilesPerRow = Math.floor(this.atlasWidth / s);
             const rows = Math.ceil(types.length / tilesPerRow);
