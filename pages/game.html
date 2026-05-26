@@ -1487,32 +1487,29 @@
             // platform：32x32 贴图，下方 24px 透明
             if (type === 'platform') {
                 ctx.clearRect(0, 0, s, s);
-                const platH = 8;
-                const r = 8;
                 ctx.fillStyle = '#C4956A';
-                ctx.beginPath();
-                ctx.moveTo(r, 0);
-                ctx.lineTo(s - r, 0);
-                ctx.quadraticCurveTo(s, 0, s, r);
-                ctx.lineTo(s, platH - r);
-                ctx.quadraticCurveTo(s, platH, s - r, platH);
-                ctx.lineTo(r, platH);
-                ctx.quadraticCurveTo(0, platH, 0, platH - r);
-                ctx.lineTo(0, r);
-                ctx.quadraticCurveTo(0, 0, r, 0);
-                ctx.closePath();
-                ctx.fill();
+                // 主体 28x6（留出左右 2px 圆角）
+                ctx.fillRect(2, 1, 28, 6);
+                // 像素级圆角（硬边，无抗锯齿）
+                ctx.fillRect(1, 2, 1, 4);   // 左
+                ctx.fillRect(30, 2, 1, 4);  // 右
+                ctx.fillRect(2, 0, 28, 1);  // 上
+                ctx.fillRect(2, 7, 28, 1);  // 下
+                // 顶部深色边线
                 ctx.fillStyle = '#A07850';
-                ctx.fillRect(r, 0, s - r * 2, 2);
+                ctx.fillRect(2, 0, 28, 2);
+                // 侧面阴影
                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                ctx.fillRect(0, 0, r, platH);
-                ctx.fillRect(s - r, 0, r, platH);
+                ctx.fillRect(0, 0, 2, 8);
+                ctx.fillRect(30, 0, 2, 8);
+                // 木纹细节
                 ctx.fillStyle = 'rgba(0,0,0,0.12)';
                 ctx.fillRect(10, 3, 6, 1);
                 ctx.fillRect(20, 5, 8, 1);
                 ctx.fillRect(6, 7, 10, 1);
+                // 底部高光
                 ctx.fillStyle = 'rgba(255,255,255,0.08)';
-                ctx.fillRect(r, platH - 1, s - r * 2, 1);
+                ctx.fillRect(2, 7, 28, 1);
             }
 
             // water：静态蓝底 + 顶部高光条
@@ -1529,6 +1526,7 @@
         buildAtlas() {
             const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water'];
             const s = this.tileSize;
+            this.atlasCtx.imageSmoothingEnabled = false;
             this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
             types.forEach((type, i) => {
                 const tile = this.generate(type);
