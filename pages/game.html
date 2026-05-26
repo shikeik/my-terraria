@@ -7,50 +7,52 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
         html, body { width: 100%; height: 100%; overflow: hidden; background: linear-gradient(to bottom, #1a1a3e 0%, #2d2d5a 50%, #4a4a7a 100%); font-family: 'Courier New', monospace; }
-        #gameCanvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
-        #fullscreenBtn { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 36px; height: 36px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-radius: 6px; color: #e0e0e0; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; backdrop-filter: blur(4px); user-select: none; }
+        #gameCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; z-index: 0; }
+        #fullscreenBtn { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 36px; height: 36px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-radius: 6px; color: #e0e0e0; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; backdrop-filter: blur(4px); user-select: none; pointer-events: auto; }
         #fullscreenBtn:active { background: rgba(50, 50, 80, 0.9); border-color: #6a6a9a; transform: translateX(-50%) scale(0.95); }
-        #info { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); color: #aaa; font-size: 11px; z-index: 1000; text-shadow: 1px 1px 0 #000; pointer-events: none; }
-        #controls { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); left: calc(20px + env(safe-area-inset-left)); z-index: 1000; display: flex; gap: 12px; }
+        #info { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); color: #aaa; font-size: 11px; z-index: 1000; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+        #controls { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); left: calc(20px + env(safe-area-inset-left)); z-index: 1000; display: flex; gap: 12px; pointer-events: auto; }
         .dpad { position: relative; width: 140px; height: 140px; }
-        .dpad-btn { position: absolute; width: 44px; height: 44px; background: rgba(30, 30, 50, 0.7); border: 2px solid #4a4a6a; border-radius: 8px; color: #aaa; font-size: 18px; display: flex; align-items: center; justify-content: center; user-select: none; }
+        .dpad-btn { position: absolute; width: 44px; height: 44px; background: rgba(30, 30, 50, 0.7); border: 2px solid #4a4a6a; border-radius: 8px; color: #aaa; font-size: 18px; display: flex; align-items: center; justify-content: center; user-select: none; pointer-events: auto; }
         .dpad-btn:active { background: rgba(60, 60, 100, 0.8); border-color: #7a7aaa; }
         .dpad-up    { top: 0; left: 48px; }
         .dpad-down  { bottom: 0; left: 48px; }
         .dpad-left  { top: 48px; left: 0; }
         .dpad-right { top: 48px; right: 0; }
-        #actionBtn { position: fixed; bottom: calc(30px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 70px; height: 70px; background: rgba(180, 60, 60, 0.7); border: 3px solid #a05050; border-radius: 50%; color: #fff; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; }
+        #actionBtn { position: absolute; bottom: calc(30px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 70px; height: 70px; background: rgba(180, 60, 60, 0.7); border: 3px solid #a05050; border-radius: 50%; color: #fff; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; pointer-events: auto; }
         #actionBtn:active { background: rgba(220, 80, 80, 0.9); transform: scale(0.92); }
-        #jumpBtn { position: fixed; bottom: calc(110px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 60px; height: 60px; background: rgba(60, 120, 180, 0.7); border: 3px solid #5080a0; border-radius: 50%; color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; }
+        #jumpBtn { position: absolute; bottom: calc(110px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 60px; height: 60px; background: rgba(60, 120, 180, 0.7); border: 3px solid #5080a0; border-radius: 50%; color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; pointer-events: auto; }
         #jumpBtn:active { background: rgba(80, 160, 220, 0.9); transform: scale(0.92); }
         /* 快捷栏：底部正中横向 */
-        #hotbarWrap { position: fixed; bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 4px; z-index: 1000; }
+        #hotbarWrap { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 4px; z-index: 1000; pointer-events: auto; }
         #blockSelector { display: flex; flex-direction: row; gap: 3px; }
-        .block-btn { width: 32px; height: 32px; border: 2px solid #4a4a6a; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; }
+        .block-btn { width: 32px; height: 32px; border: 2px solid #4a4a6a; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; pointer-events: auto; }
         .block-btn.selected { border-color: #ffff88; box-shadow: 0 0 6px rgba(255, 255, 136, 0.4); }
         /* 背包按钮（MC风格） */
-        #inventoryBtn { width: 36px; height: 36px; background: rgba(60, 45, 30, 0.85); border: 2px solid #8B6914; border-radius: 4px; color: #e0e0e0; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+        #inventoryBtn { width: 36px; height: 36px; background: rgba(60, 45, 30, 0.85); border: 2px solid #8B6914; border-radius: 4px; color: #e0e0e0; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; pointer-events: auto; }
         #inventoryBtn:active { background: rgba(80, 65, 40, 0.9); transform: scale(0.95); }
         /* 背包面板 */
-        #inventoryPanel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 320px; background: rgba(20, 20, 30, 0.95); border: 2px solid #4a4a6a; border-radius: 8px; z-index: 1001; display: none; flex-direction: column; padding: 12px; gap: 8px; }
+        #inventoryPanel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 320px; background: rgba(20, 20, 30, 0.95); border: 2px solid #4a4a6a; border-radius: 8px; z-index: 1001; display: none; flex-direction: column; padding: 12px; gap: 8px; pointer-events: auto; }
         #inventoryPanel.open { display: flex; }
         #inventoryTitle { color: #ccc; font-size: 14px; font-weight: bold; text-align: center; }
         #inventoryGrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
         .inv-slot { width: 32px; height: 32px; background: rgba(40, 40, 55, 0.8); border: 1px solid #3a3a4a; border-radius: 3px; }
-        #inventoryClose { position: absolute; top: 6px; right: 10px; color: #888; font-size: 16px; cursor: pointer; }
+        #inventoryClose { position: absolute; top: 6px; right: 10px; color: #888; font-size: 16px; cursor: pointer; pointer-events: auto; }
         #inventoryClose:active { color: #ff8888; }
         /* 右侧抽屉 */
-        #sideDrawer { position: fixed; top: 50px; right: 0; width: 280px; height: calc(100% - 50px); background: rgba(20, 20, 30, 0.95); border-left: 2px solid #4a4a6a; z-index: 1000; transform: translateX(100%); transition: transform 0.25s ease; display: flex; flex-direction: column; }
+        #sideDrawer { position: absolute; top: 50px; right: 0; width: 280px; height: calc(100% - 50px); background: rgba(20, 20, 30, 0.95); border-left: 2px solid #4a4a6a; z-index: 1000; transform: translateX(100%); transition: transform 0.25s ease; display: flex; flex-direction: column; pointer-events: auto; }
         #sideDrawer.open { transform: translateX(0); }
-        #drawerToggle { position: fixed; top: 50%; right: 0; width: 28px; height: 48px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-right: none; border-radius: 6px 0 0 6px; color: #aaa; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; user-select: none; transform: translateY(-50%); }
+        #drawerToggle { position: absolute; top: 50%; right: 0; width: 28px; height: 48px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-right: none; border-radius: 6px 0 0 6px; color: #aaa; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; user-select: none; transform: translateY(-50%); pointer-events: auto; }
         #drawerToggle:active { background: rgba(50, 50, 80, 0.9); }
         #drawerToggle.open { right: 280px; }
         .tab-bar { display: flex; gap: 2px; padding: 8px; border-bottom: 1px solid #3a3a4a; }
-        .tab-btn { flex: 1; padding: 6px 0; background: rgba(40, 40, 55, 0.8); border: 1px solid #3a3a4a; border-radius: 4px; color: #888; font-size: 12px; text-align: center; cursor: pointer; }
+        .tab-btn { flex: 1; padding: 6px 0; background: rgba(40, 40, 55, 0.8); border: 1px solid #3a3a4a; border-radius: 4px; color: #888; font-size: 12px; text-align: center; cursor: pointer; pointer-events: auto; }
         .tab-btn.active { background: rgba(60, 60, 90, 0.9); color: #ccc; border-color: #5a5a7a; }
         .tab-content { flex: 1; padding: 10px; overflow-y: auto; color: #aaa; font-size: 12px; display: none; }
         .tab-content.active { display: block; }
-        #consolePanel { position: fixed; bottom: 0; left: 0; right: 0; background: #1e1e1e; border-top: 1px solid #444; z-index: 9999; display: flex; flex-direction: column; font-family: 'Courier New', monospace; font-size: 13px; transition: height 0.2s ease; height: clamp(140px, 25vh, 220px); touch-action: auto; }
+        #uiOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; pointer-events: none; display: flex; flex-direction: column; }
+        #uiArea { flex: 1; position: relative; pointer-events: none; overflow: hidden; }
+        #consolePanel { position: relative; flex-shrink: 0; background: #1e1e1e; border-top: 1px solid #444; display: flex; flex-direction: column; font-family: 'Courier New', monospace; font-size: 13px; transition: height 0.2s ease; height: clamp(140px, 25vh, 220px); touch-action: auto; pointer-events: auto; }
         #consolePanel.collapsed { height: 32px !important; padding-bottom: env(safe-area-inset-bottom); touch-action: none; }
         #consolePanel.collapsed #consoleContent, #consolePanel.collapsed #consoleInputWrap { display: none; }
         #consolePanel.collapsed #consoleToggle { transform: rotate(180deg); }
@@ -149,55 +151,58 @@
 <base target="_blank">
 </head>
 <body>
-    <div id="fullscreenBtn" title="全屏切换">⛶</div>
-    <div id="info">
-        <div>⛏ 挖掘 / 🖱 放置</div>
-        <div id="coords">X:0 Y:0</div>
-        <div id="mouseCoords">MX:-- MY:--</div>
-        <div id="zoom">Z:1.0</div>
-        <div id="fps">FPS: 0</div>
-    </div>
-    <!-- 快捷栏 -->
-    <div id="hotbarWrap">
-        <div id="blockSelector"></div>
-        <div id="inventoryBtn" title="背包 (E)">🎒</div>
-    </div>
-    <!-- 背包面板 -->
-    <div id="inventoryPanel">
-        <span id="inventoryClose">✕</span>
-        <div id="inventoryTitle">背包</div>
-        <div id="inventoryGrid"></div>
-    </div>
-    <!-- 右侧抽屉 -->
-    <div id="drawerToggle">◀</div>
-    <div id="sideDrawer">
-        <div class="tab-bar">
-            <div class="tab-btn active" data-tab="intro">介绍</div>
-            <div class="tab-btn" data-tab="debug">调试</div>
-        </div>
-        <div class="tab-content active" data-tab="intro">
-            <p>My Terraria - 简单体素世界</p>
-            <p>⛏ 挖掘 / 🖱 放置方块</p>
-            <p>🎒 点击背包按钮管理物品</p>
-            <p>⛶ 顶部按钮切换全屏</p>
-            <p>双指捏合缩放世界</p>
-        </div>
-        <div class="tab-content" data-tab="debug">
-            <p>地形配置（占位）</p>
-        </div>
-    </div>
-    <div id="controls" class="game-gui">
-        <div class="dpad">
-            <div class="dpad-btn dpad-up"    data-key="up">▲</div>
-            <div class="dpad-btn dpad-down"  data-key="down">▼</div>
-            <div class="dpad-btn dpad-left"  data-key="left">◀</div>
-            <div class="dpad-btn dpad-right" data-key="right">▶</div>
-        </div>
-    </div>
-    <div id="jumpBtn" class="game-gui">⬆️</div>
-    <div id="actionBtn" class="game-gui">⛏</div>
     <canvas id="gameCanvas"></canvas>
-    <div id="consolePanel" class="collapsed">
+    <div id="uiOverlay">
+        <div id="uiArea">
+            <div id="fullscreenBtn" title="全屏切换">⛶</div>
+            <div id="info">
+                <div>⛏ 挖掘 / 🖱 放置</div>
+                <div id="coords">X:0 Y:0</div>
+                <div id="mouseCoords">MX:-- MY:--</div>
+                <div id="zoom">Z:1.0</div>
+                <div id="fps">FPS: 0</div>
+            </div>
+            <!-- 快捷栏 -->
+            <div id="hotbarWrap">
+                <div id="blockSelector"></div>
+                <div id="inventoryBtn" title="背包 (E)">🎒</div>
+            </div>
+            <!-- 背包面板 -->
+            <div id="inventoryPanel">
+                <span id="inventoryClose">✕</span>
+                <div id="inventoryTitle">背包</div>
+                <div id="inventoryGrid"></div>
+            </div>
+            <!-- 右侧抽屉 -->
+            <div id="drawerToggle">◀</div>
+            <div id="sideDrawer">
+                <div class="tab-bar">
+                    <div class="tab-btn active" data-tab="intro">介绍</div>
+                    <div class="tab-btn" data-tab="debug">调试</div>
+                </div>
+                <div class="tab-content active" data-tab="intro">
+                    <p>My Terraria - 简单体素世界</p>
+                    <p>⛏ 挖掘 / 🖱 放置方块</p>
+                    <p>🎒 点击背包按钮管理物品</p>
+                    <p>⛶ 顶部按钮切换全屏</p>
+                    <p>双指捏合缩放世界</p>
+                </div>
+                <div class="tab-content" data-tab="debug">
+                    <p>地形配置（占位）</p>
+                </div>
+            </div>
+            <div id="controls" class="game-gui">
+                <div class="dpad">
+                    <div class="dpad-btn dpad-up"    data-key="up">▲</div>
+                    <div class="dpad-btn dpad-down"  data-key="down">▼</div>
+                    <div class="dpad-btn dpad-left"  data-key="left">◀</div>
+                    <div class="dpad-btn dpad-right" data-key="right">▶</div>
+                </div>
+            </div>
+            <div id="jumpBtn" class="game-gui">⬆️</div>
+            <div id="actionBtn" class="game-gui">⛏</div>
+        </div>
+        <div id="consolePanel" class="collapsed">
         <div id="consoleHeader">
             <span id="consoleTitle">控制台</span>
             <div id="consoleHeaderRight">
@@ -474,6 +479,7 @@
         // ============================================================
         const DOM = {};
         function initDOM() {
+            DOM.uiArea         = document.getElementById('uiArea');
             DOM.canvas         = document.getElementById('gameCanvas');
             DOM.coordsEl       = document.getElementById('coords');
             DOM.mouseCoordsEl  = document.getElementById('mouseCoords');
