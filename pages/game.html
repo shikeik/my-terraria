@@ -154,10 +154,11 @@
         };
 
         const InputState = {
-            isLongPress: false,
             isTouchDown: false,
             touchStartX: 0, touchStartY: 0,
-            touchCurrentX: 0, touchCurrentY: 0
+            touchCurrentX: 0, touchCurrentY: 0,
+            lastGridX: -1,
+            lastGridY: -1
         };
 
         // ============================================================
@@ -984,19 +985,14 @@
             onCanvasStart(e) {
                 e.preventDefault();
                 InputState.isTouchDown = true;
-                InputState.isLongPress = false;
                 const coords = this.getCanvasCoords(e);
                 InputState.touchStartX = coords.x;
                 InputState.touchStartY = coords.y;
                 InputState.touchCurrentX = coords.x;
                 InputState.touchCurrentY = coords.y;
+                InputState.lastGridX = -1;
+                InputState.lastGridY = -1;
                 this.doRepeatAction();
-                LongPressHandler.start(
-                    () => { InputState.isLongPress = true; console.log('[input] 进入长按连续模式'); },
-                    () => { if (InputState.isTouchDown) this.doRepeatAction(); },
-                    CONFIG.LONG_PRESS_DELAY,
-                    CONFIG.REPEAT_INTERVAL
-                );
             },
 
             onCanvasMove(e) {
@@ -1007,12 +1003,18 @@
                 const sw = Camera.screenToWorld(coords.x, coords.y);
                 State.mouseWorldX = sw.x;
                 State.mouseWorldY = sw.y;
+                // 新逻辑：格子坐标变化立即触发，无限速
+                if (sw.x !== InputState.lastGridX || sw.y !== InputState.lastGridY) {
+                    InputState.lastGridX = sw.x;
+                    InputState.lastGridY = sw.y;
+                    this.doRepeatAction();
+                }
             },
 
             onCanvasEnd(e) {
                 InputState.isTouchDown = false;
-                LongPressHandler.end();
-                InputState.isLongPress = false;
+                InputState.lastGridX = -1;
+                InputState.lastGridY = -1;
                 console.log('[input] 画布操作结束');
             },
 
