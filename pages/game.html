@@ -350,7 +350,7 @@
             WORLD_HEIGHT: 100,
             GRAVITY: 2000,
             JUMP_FORCE: 660,
-            MOVE_SPEED: 350,
+            MOVE_SPEED: 150,
             MAX_FALL_SPEED: 1200,
             LONG_PRESS_DELAY: 300,
             REPEAT_INTERVAL: 80,
@@ -363,7 +363,8 @@
                 MAX_SPEED: 500,
                 BUOYANCY: 600
             },
-            AIR_DRAG: 0.8
+            AIR_DRAG: 0.8,
+            SPRINT_SPEED: 2.0
         };
         window.__CONFIG = CONFIG;
 
@@ -392,7 +393,7 @@
                 facingRight: true
             },
             camera: { x: 0, y: 0, zoom: 1.0 },
-            keys: { up: false, down: false, left: false, right: false, jump: false },
+            keys: { up: false, down: false, left: false, right: false, jump: false, sprint: false },
             selectedBlock: 'dirt',
             isDigging: true,
             isPlacing: false,
@@ -1108,8 +1109,12 @@
                     if (p.vy < -CONFIG.WATER.MAX_SPEED) p.vy = -CONFIG.WATER.MAX_SPEED;
                 } else {
                     let targetVx = 0;
-                    if (State.keys.left)  { targetVx = -CONFIG.MOVE_SPEED; p.facingRight = false; }
-                    else if (State.keys.right) { targetVx = CONFIG.MOVE_SPEED; p.facingRight = true; }
+                    const isSprinting = State.keys.sprint && (State.keys.left || State.keys.right);
+                    const moveSpeed = isSprinting
+                        ? CONFIG.MOVE_SPEED * CONFIG.SPRINT_SPEED
+                        : CONFIG.MOVE_SPEED;
+                    if (State.keys.left)  { targetVx = -moveSpeed; p.facingRight = false; }
+                    else if (State.keys.right) { targetVx = moveSpeed; p.facingRight = true; }
                     p.vx = approach(p.vx, targetVx, CONFIG.AIR_DRAG, dt);
                     if (Math.abs(p.vx) < 1) p.vx = 0;
 
@@ -1355,6 +1360,7 @@
                     case 'ArrowUp':    case 'w': State.keys.up    = true; break;
                     case 'ArrowDown':  case 's': State.keys.down  = true; break;
                     case 'k':          case ' ': State.keys.jump = true; break;
+                    case 'Shift':      State.keys.sprint = !State.keys.sprint; break;
                 }
             },
 
