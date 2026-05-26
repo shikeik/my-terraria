@@ -610,18 +610,18 @@
                             <input type="range" id="worldHeightRange" min="128" max="512" value="256" style="flex:1;min-width:0;">
                         </div>
                         <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-                            <label style="color:#888;font-size:11px;white-space:nowrap;">地形高: <span id="terrainHeightVal">256</span></label>
-                            <input type="range" id="terrainHeightRange" min="50" max="512" value="256" style="flex:1;min-width:0;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">地形高: <span id="terrainHeightVal">136</span></label>
+                            <input type="range" id="terrainHeightRange" min="50" max="512" value="136" style="flex:1;min-width:0;">
                         </div>
                         <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-                            <label style="color:#888;font-size:11px;white-space:nowrap;">表层: <span id="grassMinVal">1</span>~<span id="grassMaxVal">3</span></label>
-                            <input type="range" id="grassMinRange" min="1" max="5" value="1" style="flex:1;min-width:0;">
-                            <input type="range" id="grassMaxRange" min="1" max="10" value="3" style="flex:1;min-width:0;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">表层: <span id="grassMinVal">2</span>~<span id="grassMaxVal">5</span></label>
+                            <input type="range" id="grassMinRange" min="1" max="5" value="2" style="flex:1;min-width:0;">
+                            <input type="range" id="grassMaxRange" min="1" max="10" value="5" style="flex:1;min-width:0;">
                         </div>
                         <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-                            <label style="color:#888;font-size:11px;white-space:nowrap;">泥土: <span id="dirtMinVal">4</span>~<span id="dirtMaxVal">12</span></label>
-                            <input type="range" id="dirtMinRange" min="2" max="30" value="4" style="flex:1;min-width:0;">
-                            <input type="range" id="dirtMaxRange" min="4" max="60" value="12" style="flex:1;min-width:0;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">泥土: <span id="dirtMinVal">5</span>~<span id="dirtMaxVal">10</span></label>
+                            <input type="range" id="dirtMinRange" min="2" max="30" value="5" style="flex:1;min-width:0;">
+                            <input type="range" id="dirtMaxRange" min="4" max="60" value="10" style="flex:1;min-width:0;">
                         </div>
                     </div>
                 </div>
@@ -870,15 +870,15 @@
         const TerrainConfig = {
             SEED: 42,
             SURFACE: {
-                MAX_HEIGHT: 256,
+                MAX_HEIGHT: 136,
                 FREQ_LOW: 0.005,
                 FREQ_HIGH: 0.02
             },
             LAYERS: {
-                GRASS_DEPTH_MIN: 1,
-                GRASS_DEPTH_MAX: 3,
-                DIRT_DEPTH_MIN: 4,
-                DIRT_DEPTH_MAX: 12
+                GRASS_DEPTH_MIN: 2,
+                GRASS_DEPTH_MAX: 5,
+                DIRT_DEPTH_MIN: 5,
+                DIRT_DEPTH_MAX: 10
             },
             BIOME: {
                 FREQ: 0.003,
