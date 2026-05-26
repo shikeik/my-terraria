@@ -594,6 +594,7 @@
                 <div class="tab-bar">
                     <div class="tab-btn active" data-tab="intro">介绍</div>
                     <div class="tab-btn" data-tab="terrain">地形</div>
+                    <div class="tab-btn" data-tab="blocks">方块</div>
                 </div>
                 <div class="tab-content active" data-tab="intro">
                     <p>My Terraria - 简单体素世界</p>
@@ -624,6 +625,9 @@
                             <input type="range" id="dirtMaxRange" min="4" max="60" value="10" style="flex:1;min-width:0;">
                         </div>
                     </div>
+                </div>
+                <div class="tab-content" data-tab="blocks">
+                    <div id="blocksGrid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;"></div>
                 </div>
             </div>
             <div id="controls" class="game-gui">
@@ -2182,23 +2186,36 @@
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
 
+                // 快捷栏8个空槽位
                 const selector = document.getElementById('blockSelector');
-                BlockRegistry.getAllPlaceable().forEach((type) => {
-                    const data = window.BlockRegistry.get(type);
-                    const btn = document.createElement('div');
-                    btn.className = 'block-btn' + (type === State.selectedBlock ? ' selected' : '');
-                    btn.style.background = data.uiColor || data.color || '#888';
-                    btn.dataset.type = type;
-                    btn.title = data.tooltip || type;
-                    btn.textContent = data.icon || type[0];
-                    btn.addEventListener('click', () => {
-                        document.querySelectorAll('.block-btn').forEach(b => b.classList.remove('selected'));
-                        btn.classList.add('selected');
-                        State.selectedBlock = type;
-                        console.log('[input] 切换方块:', type);
+                for (let i = 0; i < 8; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'block-btn';
+                    slot.style.background = 'rgba(40, 40, 55, 0.5)';
+                    slot.style.border = '2px dashed #4a4a6a';
+                    selector.appendChild(slot);
+                }
+
+                // 方块选择器移到侧栏 tab
+                const blocksGrid = document.getElementById('blocksGrid');
+                if (blocksGrid) {
+                    BlockRegistry.getAllPlaceable().forEach((type) => {
+                        const data = window.BlockRegistry.get(type);
+                        const btn = document.createElement('div');
+                        btn.className = 'block-btn' + (type === State.selectedBlock ? ' selected' : '');
+                        btn.style.background = data.uiColor || data.color || '#888';
+                        btn.dataset.type = type;
+                        btn.title = data.tooltip || type;
+                        btn.textContent = data.icon || type[0];
+                        btn.addEventListener('click', () => {
+                            document.querySelectorAll('.block-btn').forEach(b => b.classList.remove('selected'));
+                            btn.classList.add('selected');
+                            State.selectedBlock = type;
+                            console.log('[input] 切换方块:', type);
+                        });
+                        blocksGrid.appendChild(btn);
                     });
-                    selector.appendChild(btn);
-                });
+                }
 
                 // 背包格子生成（36格，8列）
                 const INV_SLOTS = 36;
