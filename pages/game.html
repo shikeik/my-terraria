@@ -149,7 +149,8 @@
             mouseWorldY: -1,
             mouseScreenX: 0,
             mouseScreenY: 0,
-            frameCount: 0
+            frameCount: 0,
+            dropThrough: { active: false, elapsed: 0, duration: 0.2 }
         };
 
         const InputState = {
@@ -330,7 +331,7 @@
                         this.instanceMap[x][y] = { type: 'water', index: idx };
                     } else if (newType === 'platform') {
                         const idx = this.platMesh.count;
-                        this.dummy.position.set(x * ts + ts / 2, y * ts + 4, 0);
+                        this.dummy.position.set(x * ts + ts / 2, (y + 1) * ts - 4, 0);
                         this.dummy.updateMatrix();
                         this.platMesh.setMatrixAt(idx, this.dummy.matrix);
                         this.platMesh.count = idx + 1;
@@ -604,6 +605,157 @@
                 } else {
                     this.eye.position.x = -4;
                     this.tool.scale.x = -1;
+                }
+            }
+        };
+
+
+        // ============================================================
+        //  MODULE: Physics
+        // ============================================================
+        const Physics = {
+            checkCollision(px, py, pw, ph) {
+                const ts = CONFIG.TILE_SIZE;
+                const left   = Math.floor(px / ts);
+                const right  = Math.floor((px + pw - 1) / ts);
+                const bottom = Math.floor(py / ts);
+                const top    = Math.floor((py + ph - 1) / ts);
+                for (let tx = left; tx <= right; tx++) {
+                    for (let ty = bottom; ty <= top; ty++) {
+                        const block = World.getBlock(tx, ty);
+                        if (block === 'platform') continue;
+                        if (World.isSolid(tx, ty)) return true;
+                    }
+                }
+                return false;
+            },
+
+            checkInWater(p) {
+                const ts = CONFIG.TILE_SIZE;
+                const left   = Math.floor(p.x / ts);
+                const right  = Math.floor((p.x + p.w - 1) / ts);
+                const bottom = Math.floor(p.y / ts);
+                const top    = Math.floor((p.y + p.h - 1) / ts);
+                for (let tx = left; tx <= right; tx++) {
+                    for (let ty = bottom; ty <= top; ty++) {
+                        if (World.getBlock(tx, ty) === 'water') return true;
+                    }
+                }
+                return false;
+            },
+
+            update(dt) {
+                const p = State.player;
+                const ts = CONFIG.TILE_SIZE;
+                const drop = State.dropThrough;
+
+                const inWater = this.checkInWater(p);
+                const waterSpeed = inWater ? CONFIG.MOVE_SPEED * CONFIG.WATER.MOVE_SCALE : 0;
+
+                const approach = (curr, target, drag, dt) => {
+                    return curr + (target - curr) * (1 - Math.pow(drag, dt * 60));
+                };
+
+                // 下跳
+                if (State.keys.down && State.keys.jump && p.onGround) {
+                    const footX = Math.floor((p.x + p.w / 2) / ts);
+                    const footY = Math.floor(p.y / ts) - 1;
+                    if (World.getBlock(footX, footY) === 'platform') {
+                        drop.active = true;
+                        drop.elapsed = 0;
+                        p.onGround = false;
+                        console.log('[physics] 启动下跳穿过平台');
+                    }
+                }
+                if (drop.active) {
+                    drop.elapsed += dt;
+                    if (drop.elapsed >= drop.duration) {
+                        drop.active = false;
+                        console.log('[physics] 下跳结束');
+                    }
+                }
+
+                if (inWater) {
+                    let targetVx = 0;
+                    if (State.keys.left)  { targetVx = -waterSpeed; p.facingRight = false; }
+                    else if (State.keys.right) { targetVx = waterSpeed; p.facingRight = true; }
+                    p.vx = approach(p.vx, targetVx, CONFIG.WATER.DRAG, dt);
+                    if (Math.abs(p.vx) < 1) p.vx = 0;
+
+                    if (State.keys.up || State.keys.down) {
+                        let targetVy = 0;
+                        if (State.keys.up)    targetVy = waterSpeed;
+                        else if (State.keys.down) targetVy = -waterSpeed;
+                        p.vy = approach(p.vy, targetVy, CONFIG.WATER.DRAG, dt);
+                    } else {
+                        p.vy -= CONFIG.GRAVITY * CONFIG.WATER.GRAVITY_SCALE * dt;
+                    }
+                    if (p.vy > CONFIG.WATER.MAX_SPEED) p.vy = CONFIG.WATER.MAX_SPEED;
+                    if (p.vy < -CONFIG.WATER.MAX_SPEED) p.vy = -CONFIG.WATER.MAX_SPEED;
+                } else {
+                    let targetVx = 0;
+                    if (State.keys.left)  { targetVx = -CONFIG.MOVE_SPEED; p.facingRight = false; }
+                    else if (State.keys.right) { targetVx = CONFIG.MOVE_SPEED; p.facingRight = true; }
+                    p.vx = approach(p.vx, targetVx, CONFIG.AIR_DRAG, dt);
+                    if (Math.abs(p.vx) < 1) p.vx = 0;
+
+                    if (State.keys.jump && p.onGround) {
+                        p.vy = CONFIG.JUMP_FORCE;
+                        p.onGround = false;
+                    }
+
+                    p.vy -= CONFIG.GRAVITY * dt;
+                    if (p.vy < -CONFIG.MAX_FALL_SPEED) p.vy = -CONFIG.MAX_FALL_SPEED;
+                }
+
+                // 水平碰撞
+                const newX = p.x + p.vx * dt;
+                if (!this.checkCollision(newX, p.y, p.w, p.h)) {
+                    p.x = newX;
+                } else {
+                    if (p.onGround) {
+                        const stepY = p.y + CONFIG.TILE_SIZE;
+                        if (!this.checkCollision(newX, stepY, p.w, p.h)) {
+                            p.y = stepY;
+                            p.x = newX;
+                            p.vy = 0;
+                            console.log('[physics] 台阶上升:', Math.floor(p.x), Math.floor(p.y));
+                        } else {
+                            p.vx = 0;
+                        }
+                    } else {
+                        p.vx = 0;
+                    }
+                }
+
+                // 垂直碰撞
+                const newY = p.y + p.vy * dt;
+                if (!this.checkCollision(p.x, newY, p.w, p.h)) {
+                    p.y = newY;
+                    p.onGround = false;
+
+                    // 平台 snap
+                    if (p.vy < 0 && !drop.active) {
+                        const footLeft  = Math.floor(p.x / ts);
+                        const footRight = Math.floor((p.x + p.w - 1) / ts);
+                        const footY     = Math.floor(p.y / ts);
+                        for (let fx = footLeft; fx <= footRight; fx++) {
+                            if (World.getBlock(fx, footY) === 'platform') {
+                                const platTop = (footY + 1) * ts;
+                                const prevBottom = p.y - p.vy * dt;
+                                if (prevBottom >= platTop && p.y <= platTop + 4) {
+                                    p.y = platTop;
+                                    p.vy = 0;
+                                    p.onGround = true;
+                                    console.log('[physics] 平台 snap:', fx, footY);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (p.vy < 0) p.onGround = true;
+                    p.vy = 0;
                 }
             }
         };
@@ -1035,6 +1187,7 @@
                 if (dt > 0.1) dt = 0.1;
                 if (dt <= 0) dt = 0.001;
                 State.frameCount++;
+                Physics.update(dt);
                 Camera.update();
                 PlayerRenderer.update();
                 ThreeJSRenderer.updateCamera();
