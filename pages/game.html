@@ -58,6 +58,7 @@
     <div id="info">
         <div>⛏ 挖掘 / 🖱 放置</div>
         <div id="coords">X:0 Y:0</div>
+        <div id="fps">FPS: 0</div>
     </div>
     <div id="blockSelector"></div>
     <div id="controls">
@@ -272,7 +273,7 @@
                 onGround: false,
                 facingRight: true
             },
-            camera: { x: 0, y: 0 },
+            camera: { x: 0, y: 0, zoom: 1.0 },
             keys: { up: false, down: false, left: false, right: false, jump: false },
             selectedBlock: 'dirt',
             isDigging: true,
@@ -300,6 +301,7 @@
         function initDOM() {
             DOM.canvas         = document.getElementById('gameCanvas');
             DOM.coordsEl       = document.getElementById('coords');
+            DOM.fpsEl          = document.getElementById('fps');
             DOM.fullscreenBtn  = document.getElementById('fullscreenBtn');
             DOM.actionBtn      = document.getElementById('actionBtn');
             DOM.jumpBtn        = document.getElementById('jumpBtn');
@@ -405,9 +407,12 @@
                     uniforms: terrainShader.uniforms,
                     vertexShader: terrainShader.vertexShader,
                     fragmentShader: terrainShader.fragmentShader,
-                    transparent: true
+                    transparent: true,
+                    depthTest: false,
+                    depthWrite: false
                 });
                 this.terrainMesh = new THREE.InstancedMesh(geo, terrainMat, maxCount);
+                this.terrainMesh.renderOrder = 0;
                 this.terrainMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
                 // aTileIndex 实例属性
                 const tileIndices = new Float32Array(maxCount);
@@ -425,9 +430,10 @@
                 // 高亮框
                 const hlGeo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
                 const hlEdges = new THREE.EdgesGeometry(hlGeo);
-                const hlMat = new THREE.LineBasicMaterial({ color: 0xff5050, transparent: true, opacity: 0.8 });
+                const hlMat = new THREE.LineBasicMaterial({ color: 0xff5050, transparent: true, opacity: 0.8, depthTest: false, depthWrite: false });
                 this.highlightMesh = new THREE.LineSegments(hlEdges, hlMat);
                 this.highlightMesh.visible = false;
+                this.highlightMesh.renderOrder = 2;
                 this.scene.add(this.highlightMesh);
 
                 // 星星
@@ -437,6 +443,7 @@
                 starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
                 const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true, opacity: 0.3 });
                 this.stars = new THREE.Points(starGeo, starMat);
+                this.stars.renderOrder = -1;
                 this.scene.add(this.stars);
                 this.starBase = [];
                 for (let i = 0; i < starCount; i++) {
@@ -534,9 +541,9 @@
                 const w = window.innerWidth;
                 const h = window.innerHeight;
                 this.camera.left   = c.x;
-                this.camera.right  = c.x + w;
+                this.camera.right  = c.x + w * c.zoom;
                 this.camera.bottom = c.y;
-                this.camera.top    = c.y + h;
+                this.camera.top    = c.y + h * c.zoom;
                 this.camera.updateProjectionMatrix();
             },
 
@@ -729,16 +736,19 @@
                 const c = State.camera;
                 const cw = window.innerWidth;
                 const ch = window.innerHeight;
-                c.x = p.x + p.w / 2 - cw / 2;
-                c.y = p.y + p.h / 2 - ch / 2;
+                const halfW = (cw / 2) * c.zoom;
+                const halfH = (ch / 2) * c.zoom;
+                c.x = p.x + p.w / 2 - halfW;
+                c.y = p.y + p.h / 2 - halfH;
             },
 
             // 唯一翻转点：屏幕坐标系(Y向下) → 世界坐标系(Y向上)
             screenToWorld(sx, sy) {
                 const ch = window.innerHeight;
+                const zoom = State.camera.zoom;
                 return {
-                    x: Math.floor((State.camera.x + sx) / CONFIG.TILE_SIZE),
-                    y: Math.floor((State.camera.y + (ch - sy)) / CONFIG.TILE_SIZE)
+                    x: Math.floor((State.camera.x + sx * zoom) / CONFIG.TILE_SIZE),
+                    y: Math.floor((State.camera.y + (ch - sy) * zoom) / CONFIG.TILE_SIZE)
                 };
             }
         };
@@ -813,6 +823,14 @@
                 this.tool.position.set(0, 0, 0);
                 this.group.add(this.tool);
 
+                this.group.renderOrder = 1;
+                this.group.traverse(child => {
+                    if (child.isMesh) {
+                        child.material.transparent = true;
+                        child.material.depthTest = false;
+                        child.material.depthWrite = false;
+                    }
+                });
                 ThreeJSRenderer.scene.add(this.group);
                 console.log('[player] 玩家渲染器初始化完成');
             },
@@ -820,7 +838,7 @@
             update() {
                 const p = State.player;
                 // Group 中心对齐玩家 AABB 中心
-                this.group.position.set(p.x + p.w / 2, p.y + p.h / 2, 0);
+                this.group.position.set(p.x + p.w / 2, p.y + p.h / 2, 1);
 
                 // 朝向：眼睛 x 偏移 + 工具 scale.x 镜像
                 if (p.facingRight) {
@@ -1030,7 +1048,13 @@
                     DOM.canvas.releasePointerCapture(e.pointerId);
                     this.onCanvasEnd(e);
                 });
-                DOM.canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+                DOM.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? 1.1 : 0.9;
+                    State.camera.zoom *= delta;
+                    if (State.camera.zoom < 0.3) State.camera.zoom = 0.3;
+                    if (State.camera.zoom > 3.0) State.camera.zoom = 3.0;
+                }, { passive: false });
 
                 DOM.dpadBtns.forEach(btn => {
                     const key = btn.dataset.key;
@@ -1407,6 +1431,7 @@
         // ============================================================
         const GameLoop = {
             lastTime: 0,
+            fps: { frames: 0, lastTime: 0, value: 0 },
             tick(time) {
                 if (!this.lastTime) this.lastTime = time;
                 let dt = (time - this.lastTime) / 1000;
@@ -1414,6 +1439,14 @@
                 if (dt > 0.1) dt = 0.1;
                 if (dt <= 0) dt = 0.001;
                 State.frameCount++;
+
+                // FPS 计算
+                this.fps.frames++;
+                if (time - this.fps.lastTime >= 1000) {
+                    this.fps.value = this.fps.frames;
+                    this.fps.frames = 0;
+                    this.fps.lastTime = time;
+                }
                 Physics.update(dt);
                 Camera.update();
                 PlayerRenderer.update();
@@ -1421,6 +1454,7 @@
                 ThreeJSRenderer.render();
                 DOM.coordsEl.textContent = 'X:' + Math.floor(State.player.x / CONFIG.TILE_SIZE)
                                          + ' Y:' + Math.floor(State.player.y / CONFIG.TILE_SIZE);
+                if (DOM.fpsEl) DOM.fpsEl.textContent = 'FPS:' + this.fps.value;
                 requestAnimationFrame((t) => this.tick(t));
             },
             start() {
