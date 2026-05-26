@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<!--
+  Simple Terraria v65
+  commit-msg: 水中重力系数固化为0.1，MAX_SPEED限制水中终端下落速度
+-->
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simple Terraria - Mobile v65</title>
+    <style>
+        /* ====== 全局重置 ====== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #1a1a2e;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* ====== 游戏画布 ====== */
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* ====== 全屏按钮 ====== */
+        #fullscreenBtn {
+            position: fixed;
+            top: calc(12px + env(safe-area-inset-top));
+            right: calc(12px + env(safe-area-inset-right));
+            width: 44px;
+            height: 44px;
+            background: rgba(30, 30, 50, 0.85);
+            border: 2px solid #4a4a6a;
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+            user-select: none;
+        }
+        #fullscreenBtn:active {
+            background: rgba(50, 50, 80, 0.9);
+            border-color: #6a6a9a;
+            transform: scale(0.95);
+        }
+
+        /* ====== 信息面板 ====== */
+        #info {
+            position: fixed;
+            top: calc(12px + env(safe-area-inset-top));
+            left: calc(12px + env(safe-area-inset-left));
+            color: #aaa;
+            font-size: 12px;
+            z-index: 1000;
+            text-shadow: 1px 1px 0 #000;
+            pointer-events: none;
+        }
+
+        /* ====== 方向键 ====== */
+        #controls {
+            position: fixed;
+            bottom: calc(20px + env(safe-area-inset-bottom));
+            left: calc(20px + env(safe-area-inset-left));
+            z-index: 1000;
+            display: flex;
+            gap: 12px;
+        }
+        .dpad {
+            position: relative;
+            width: 140px;
+            height: 140px;
+        }
+        .dpad-btn {
+            position: absolute;
+            width: 44px;
+            height: 44px;
+            background: rgba(30, 30, 50, 0.7);
+            border: 2px solid #4a4a6a;
+            border-radius: 8px;
+            color: #aaa;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        }
+        .dpad-btn:active {
+            background: rgba(60, 60, 100, 0.8);
+            border-color: #7a7aaa;
+        }
+        .dpad-up    { top: 0; left: 48px; }
+        .dpad-down  { bottom: 0; left: 48px; }
+        .dpad-left  { top: 48px; left: 0; }
+        .dpad-right { top: 48px; right: 0; }
+
+        /* ====== 动作按钮 ====== */
+        #actionBtn {
+            position: fixed;
+            bottom: calc(30px + env(safe-area-inset-bottom));
+            right: calc(30px + env(safe-area-inset-right));
+            width: 70px;
+            height: 70px;
+            background: rgba(180, 60, 60, 0.7);
+            border: 3px solid #a05050;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            user-select: none;
+        }
+        #actionBtn:active {
+            background: rgba(220, 80, 80, 0.9);
+            transform: scale(0.92);
+        }
+
+        /* ====== 跳跃按钮 ====== */
+        #jumpBtn {
+            position: fixed;
+            bottom: calc(110px + env(safe-area-inset-bottom));
+            right: calc(30px + env(safe-area-inset-right));
+            width: 60px;
+            height: 60px;
+            background: rgba(60, 120, 180, 0.7);
+            border: 3px solid #5080a0;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            user-select: none;
+        }
+        #jumpBtn:active {
+            background: rgba(80, 160, 220, 0.9);
+            transform: scale(0.92);
+        }
+
+        /* ====== 方块选择器 ====== */
+        #blockSelector {
+            position: fixed;
+            top: calc(70px + env(safe-area-inset-top));
+            right: calc(12px + env(safe-area-inset-right));
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 1000;
+        }
+        .block-btn {
+            width: 36px;
+            height: 36px;
+            border: 2px solid #4a4a6a;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #fff;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .block-btn.selected {
+            border-color: #ffff88;
+            box-shadow: 0 0 8px rgba(255, 255, 136, 0.4);
+        }
+
+        /* ====== 内置控制台 ====== */
+        #consolePanel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1e1e1e;
+            border-top: 1px solid #444;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            transition: height 0.2s ease;
+            height: clamp(140px, 25vh, 220px);
+            touch-action: auto;
+        }
+        #consolePanel.collapsed {
+            height: 32px !important;
+            padding-bottom: env(safe-area-inset-bottom);
+            touch-action: none;
+        }
+        #consolePanel.collapsed #consoleContent,
+        #consolePanel.collapsed #consoleInputWrap {
+            display: none;
+        }
+        #consolePanel.collapsed #consoleToggle {
+            transform: rotate(180deg);
+        }
+        #consoleHeader {
+            height: 32px;
+            background: #2d2d2d;
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            flex-shrink: 0;
+            user-select: none;
+            cursor: pointer;
+        }
+        #consoleTitle {
+            color: #ccc;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        #consoleHeaderRight {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        #consoleClear,
+        #consoleAuto,
+        #consoleCopy,
+        #consoleToggle {
+            color: #888;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        #consoleCopy:active {
+            color: #75beff;
+        }
+        #consoleAuto.auto-on {
+            color: #88ff88;
+        }
+        #consoleAuto.auto-off {
+            color: #ff8888;
+            text-decoration: line-through;
+        }
+        #consoleToggle {
+            transition: transform 0.2s;
+        }
+        #consoleContent {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 6px 10px;
+            padding-bottom: calc(6px + env(safe-area-inset-bottom));
+            color: #d4d4d4;
+            line-height: 1.5;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            min-height: 0;
+            overscroll-behavior: contain;
+        }
+        #consoleContent .log-line {
+            margin-bottom: 2px;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+        #consoleContent .log-log   { color: #d4d4d4; }
+        #consoleContent .log-warn  { color: #ffcc00; }
+        #consoleContent .log-error { color: #ff4444; }
+        #consoleContent .log-info  { color: #75beff; }
+        #consoleContent .log-time {
+            color: #666;
+            font-size: 11px;
+            margin-right: 6px;
+        }
+        #consoleInputWrap {
+            height: 36px;
+            border-top: 1px solid #444;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            flex-shrink: 0;
+            background: #1e1e1e;
+        }
+        #consolePrompt {
+            color: #888;
+            margin-right: 8px;
+            font-size: 14px;
+        }
+        #consoleInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        #consoleInput::placeholder {
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <!-- 全屏切换按钮 -->
+    <div id="fullscreenBtn" title="全屏切换">⛶</div>
+
+    <!-- 信息面板 -->
+    <div id="info">
+        <div>⛏ 挖掘 / 🖱 放置</div>
+        <div id="coords">X:0 Y:0</div>
+    </div>
+
+    <!-- 方块选择器（动态生成） -->
+    <div id="blockSelector"></div>
+
+    <!-- 方向键 -->
+    <div id="controls">
+        <div class="dpad">
+            <div class="dpad-btn dpad-up"    data-key="up">▲</div>
+            <div class="dpad-btn dpad-down"  data-key="down">▼</div>
+            <div class="dpad-btn dpad-left"  data-key="left">◀</div>
+            <div class="dpad-btn dpad-right" data-key="right">▶</div>
+        </div>
+    </div>
+
+    <!-- 跳跃按钮 -->
+    <div id="jumpBtn">⬆️</div>
+    <!-- 动作按钮 -->
+    <div id="actionBtn">⛏</div>
+
+    <!-- 游戏画布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 内置控制台 -->
+    <div id="consolePanel" class="collapsed">
+        <div id="consoleHeader">
+            <span id="consoleTitle">控制台</span>
+            <div id="consoleHeaderRight">
+                <span id="consoleAuto" class="auto-on">auto</span>
+                <span id="consoleCopy">复制</span>
+                <span id="consoleClear">清空</span>
+                <span id="consoleToggle">▼</span>
+            </div>
+        </div>
+        <div id="consoleContent"></div>
+        <div id="consoleInputWrap">
+            <span id="consolePrompt">&gt;</span>
+            <input type="text" id="consoleInput" placeholder="输入JS代码..." autocomplete="off" spellcheck="false">
+        </div>
+    </div>
+
+    <script>
+    // ============================================================
+    //  Simple Terraria v65 - 模块化重构版
+    // ============================================================
+
+    (function() {
+        "use strict";
+
+        // ============================================================
+        //  MODULE: Config (常量配置)
+        // ============================================================
+        const CONFIG = {
+            TILE_SIZE: 32,
+            WORLD_WIDTH: 200,
+            WORLD_HEIGHT: 100,
+            GRAVITY: 2000,         // px/s² (用户调优)
+            JUMP_FORCE: -660,       // px/s   (用户调优)
+            MOVE_SPEED: 350,        // px/s   (用户调优)
+            MAX_FALL_SPEED: 1200,   // px/s   (原20px/帧 @60fps)
+            LONG_PRESS_DELAY: 300,
+            REPEAT_INTERVAL: 80,
+            LONG_PRESS_MOVE_THRESHOLD: 20,
+            RESPAWN: { x: 2, y: 13 },  // 格子坐标，后续增加安全点搜索机制
+            WATER: {
+                MOVE_SCALE: 0.4,      // 水中移速 = 陆地移速 * 此系数
+                DRAG: 0.95,           // 水中起步/停止衰减系数
+                GRAVITY_SCALE: 0.1,   // 水中重力系数（用户调优）
+                MAX_SPEED: 500,       // 水中终端速度
+                BUOYANCY: 600         // 方向键上/下额外力 px/s²
+            },
+            AIR_DRAG: 0.8              // 陆地（空气）水平衰减系数
+        };
+        window.__CONFIG = CONFIG; // 暴露供控制台调试
+
+        // ============================================================
+        //  MODULE: BlockRegistry (方块注册表)
+        // ============================================================
+        const BlockRegistry = {
+            _blocks: {},
+            register(type, config) {
+                this._blocks[type] = config;
+            },
+            get(type) {
+                return this._blocks[type] || null;
+            },
+            isSolid(type) {
+                const data = this._blocks[type];
+                return data ? data.solid : false;
+            },
+            getAllPlaceable() {
+                return Object.keys(this._blocks).filter(k => k !== 'air');
+            }
+        };
+
+        // ============================================================
+        //  MODULE: State (全局状态)
+        // ============================================================
+        const State = {
+            world: [],
+            player: {
+                x: 0, y: 0, w: 24, h: 48,
+                vx: 0, vy: 0,
+                onGround: false,
+                facingRight: true
+            },
+            camera: { x: 0, y: 0 },
+            keys: { up: false, down: false, left: false, right: false, jump: false },
+            selectedBlock: 'dirt',
+            isDigging: true,
+            isPlacing: false,
+            mouseWorldX: -1,
+            mouseWorldY: -1,
+            mouseScreenX: 0,
+            mouseScreenY: 0,
+            frameCount: 0,
+            stepUp: { active: false, targetY: 0 },
+            dropThrough: { active: false, elapsed: 0, duration: 0.2 }
+        };
+
+        // ============================================================
+        //  MODULE: InputState (输入相关状态)
+        // ============================================================
+        const InputState = {
+            isLongPress: false,
+            isTouchDown: false,
+            touchStartX: 0,
+            touchStartY: 0,
+            touchCurrentX: 0,
+            touchCurrentY: 0
+        };
+
+        // ============================================================
+        //  MODULE: DOM (DOM 元素引用)
+        // ============================================================
+        const DOM = {};
+        function initDOM() {
+            DOM.canvas         = document.getElementById('gameCanvas');
+            DOM.ctx            = DOM.canvas.getContext('2d');
+            DOM.coordsEl       = document.getElementById('coords');
+            DOM.fullscreenBtn  = document.getElementById('fullscreenBtn');
+            DOM.actionBtn      = document.getElementById('actionBtn');
+            DOM.jumpBtn        = document.getElementById('jumpBtn');
+            DOM.blockBtns      = document.querySelectorAll('.block-btn');
+            DOM.dpadBtns       = document.querySelectorAll('.dpad-btn');
+            DOM.consolePanel   = document.getElementById('consolePanel');
+            DOM.consoleContent = document.getElementById('consoleContent');
+            DOM.consoleInput   = document.getElementById('consoleInput');
+            DOM.consoleHeader  = document.getElementById('consoleHeader');
+            DOM.consoleAuto    = document.getElementById('consoleAuto');
+            DOM.consoleClear   = document.getElementById('consoleClear');
+            DOM.consoleCopy    = document.getElementById('consoleCopy');
+            DOM.consoleToggle  = document.getElementById('consoleToggle');
+            console.log('[dom] DOM 引用初始化完成');
+        }
+
+        // ============================================================
+        //  MODULE: World (世界生成与管理)
+        // ============================================================
+        const World = {
+            init() {
+                State.world = [];
+                const W = CONFIG.WORLD_WIDTH;
+                const H = CONFIG.WORLD_HEIGHT;
+                let surface = 0;
+                for (let x = 0; x < W; x++) {
+                    State.world[x] = [];
+                    surface = 15 + Math.sin(x * 0.1) * 3 + Math.sin(x * 0.03) * 5;
+                    for (let y = 0; y < H; y++) {
+                        if (y < surface - 1) {
+                            State.world[x][y] = 'air';
+                        } else if (y < surface) {
+                            State.world[x][y] = 'grass';
+                        } else if (y < surface + 5) {
+                            State.world[x][y] = 'dirt';
+                        } else {
+                            State.world[x][y] = 'stone';
+                        }
+                        // 洞穴
+                        if (y > surface + 3 && Math.random() < 0.08) {
+                            State.world[x][y] = 'air';
+                        }
+                        // 沙层
+                        if (y > surface + 15 && y < surface + 25 && Math.random() < 0.3) {
+                            State.world[x][y] = 'sand';
+                        }
+                        // 水
+                        if (y > surface + 8 && State.world[x][y] === 'air' && Math.random() < 0.05) {
+                            State.world[x][y] = 'water';
+                        }
+                    }
+                }
+                // 重置玩家位置到重生点
+                State.player.x = CONFIG.RESPAWN.x * CONFIG.TILE_SIZE;
+                State.player.y = CONFIG.RESPAWN.y * CONFIG.TILE_SIZE;
+                State.player.vx = 0;
+                State.player.vy = 0;
+                // TODO: 安全点搜索机制——从天空往下扫描，找到第一个可站立的空位
+                console.log('[world] 世界初始化完成，尺寸:', W, 'x', H);
+                console.log('[world] 玩家初始位置:', CONFIG.RESPAWN.x, CONFIG.RESPAWN.y);
+
+                // 测试：开局左边生成 8x15 水体结构
+                const pondMatrix = [
+                    '气气气气气气气气',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石石石石石石石石'
+                ];
+                this.placeStructure(pondMatrix, 5, Math.floor(surface) - 0);
+            },
+
+            placeStructure(matrix, startX, startY) {
+                const charMap = {
+                    '气': 'air',
+                    '水': 'water',
+                    '土': 'dirt',
+                    '石': 'stone',
+                    '草': 'grass',
+                    '木': 'wood',
+                    '沙': 'sand',
+                    '台': 'platform'
+                };
+                for (let row = 0; row < matrix.length; row++) {
+                    const line = matrix[row];
+                    for (let col = 0; col < line.length; col++) {
+                        const ch = line[col];
+                        const type = charMap[ch];
+                        if (type && type !== 'air') {
+                            const wx = startX + col;
+                            const wy = startY + row;
+                            if (wx >= 0 && wx < CONFIG.WORLD_WIDTH && wy >= 0 && wy < CONFIG.WORLD_HEIGHT) {
+                                this.setBlock(wx, wy, type);
+                            }
+                        }
+                    }
+                }
+                console.log('[world] 结构生成完成:', startX, startY, matrix.length + 'x' + matrix[0].length);
+            },
+
+            getBlock(x, y) {
+                if (x < 0 || x >= CONFIG.WORLD_WIDTH || y < 0 || y >= CONFIG.WORLD_HEIGHT) {
+                    return null;
+                }
+                return State.world[x][y];
+            },
+
+            setBlock(x, y, type) {
+                if (x < 0 || x >= CONFIG.WORLD_WIDTH || y < 0 || y >= CONFIG.WORLD_HEIGHT) {
+                    return;
+                }
+                State.world[x][y] = type;
+                if (typeof Renderer !== 'undefined' && Renderer.updateCacheBlock) {
+                    Renderer.updateCacheBlock(x, y);
+                }
+            },
+
+            isSolid(x, y) {
+                const block = this.getBlock(x, y);
+                if (block === null) return false; // 边界视为空
+                return BlockRegistry.isSolid(block);
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Physics (物理与碰撞)
+        // ============================================================
+        const Physics = {
+            checkCollision(px, py, pw, ph) {
+                const left   = Math.floor(px / CONFIG.TILE_SIZE);
+                const right  = Math.floor((px + pw - 1) / CONFIG.TILE_SIZE);
+                const top    = Math.floor(py / CONFIG.TILE_SIZE);
+                const bottom = Math.floor((py + ph - 1) / CONFIG.TILE_SIZE);
+                for (let tx = left; tx <= right; tx++) {
+                    for (let ty = top; ty <= bottom; ty++) {
+                        const block = World.getBlock(tx, ty);
+                        if (block === 'platform') {
+                            // 平台不参与通用碰撞检测，垂直方向在 Physics.update 中单独处理 snap
+                            continue;
+                        }
+                        if (World.isSolid(tx, ty)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            },
+
+            checkInWater(p) {
+                const ts = CONFIG.TILE_SIZE;
+                const left   = Math.floor(p.x / ts);
+                const right  = Math.floor((p.x + p.w - 1) / ts);
+                const top    = Math.floor(p.y / ts);
+                const bottom = Math.floor((p.y + p.h - 1) / ts);
+                for (let tx = left; tx <= right; tx++) {
+                    for (let ty = top; ty <= bottom; ty++) {
+                        if (World.getBlock(tx, ty) === 'water') {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            },
+
+            update(dt) {
+                const p = State.player;
+                const drop = State.dropThrough;
+
+                const inWater = this.checkInWater(p);
+                const waterSpeed = inWater ? CONFIG.MOVE_SPEED * CONFIG.WATER.MOVE_SCALE : 0;
+
+                // 通用：速度向目标值指数逼近（起步和停止同一系数）
+                const approach = (curr, target, drag, dt) => {
+                    return curr + (target - curr) * (1 - Math.pow(drag, dt * 60));
+                };
+
+                // 下跳：独立于水中/空气，两个环境都能下跳
+                if (State.keys.down && State.keys.jump && p.onGround) {
+                    const footX = Math.floor((p.x + p.w / 2) / CONFIG.TILE_SIZE);
+                    const footY = Math.floor((p.y + p.h) / CONFIG.TILE_SIZE);
+                    if (World.getBlock(footX, footY) === 'platform') {
+                        drop.active = true;
+                        drop.elapsed = 0;
+                        p.onGround = false;
+                        console.log('[physics] 启动下跳穿过平台');
+                    }
+                }
+                if (drop.active) {
+                    drop.elapsed += dt;
+                    if (drop.elapsed >= drop.duration) {
+                        drop.active = false;
+                        console.log('[physics] 下跳结束');
+                    }
+                }
+
+                if (inWater) {
+                    // 水中：水平起步/停止同一系数
+                    let targetVx = 0;
+                    if (State.keys.left)  { targetVx = -waterSpeed; p.facingRight = false; }
+                    else if (State.keys.right) { targetVx = waterSpeed; p.facingRight = true; }
+                    p.vx = approach(p.vx, targetVx, CONFIG.WATER.DRAG, dt);
+                    if (Math.abs(p.vx) < 1) p.vx = 0;
+
+                    // 水中垂直：按键时向固定速度逼近（不会无限加速）
+                    // 不按键时受减弱重力缓慢下沉
+                    if (State.keys.up || State.keys.down) {
+                        let targetVy = 0;
+                        if (State.keys.up)    targetVy = -waterSpeed;
+                        else if (State.keys.down) targetVy = waterSpeed;
+                        p.vy = approach(p.vy, targetVy, CONFIG.WATER.DRAG, dt);
+                    } else {
+                        p.vy += CONFIG.GRAVITY * CONFIG.WATER.GRAVITY_SCALE * dt;
+                    }
+                    if (p.vy > CONFIG.WATER.MAX_SPEED) p.vy = CONFIG.WATER.MAX_SPEED;
+                    if (p.vy < -CONFIG.WATER.MAX_SPEED) p.vy = -CONFIG.WATER.MAX_SPEED;
+                } else {
+                    // 空气中：水平起步/停止同一系数
+                    let targetVx = 0;
+                    if (State.keys.left)  { targetVx = -CONFIG.MOVE_SPEED; p.facingRight = false; }
+                    else if (State.keys.right) { targetVx = CONFIG.MOVE_SPEED; p.facingRight = true; }
+                    p.vx = approach(p.vx, targetVx, CONFIG.AIR_DRAG, dt);
+                    if (Math.abs(p.vx) < 1) p.vx = 0;
+
+                    // 跳跃
+                    if (State.keys.jump && p.onGround) {
+                        p.vy = CONFIG.JUMP_FORCE;
+                        p.onGround = false;
+                    }
+
+                    // 重力
+                    p.vy += CONFIG.GRAVITY * dt;
+                    if (p.vy > CONFIG.MAX_FALL_SPEED) p.vy = CONFIG.MAX_FALL_SPEED;
+                }
+
+                // 水平碰撞（含1格高台阶自动上升：直接瞬移）
+                const newX = p.x + p.vx * dt;
+                if (!this.checkCollision(newX, p.y, p.w, p.h)) {
+                    p.x = newX;
+                } else {
+                    // 尝试台阶上升：前方被挡，但上移1格后可通过（仅在地上时）
+                    if (p.onGround) {
+                        const stepY = p.y - CONFIG.TILE_SIZE;
+                        if (!this.checkCollision(newX, stepY, p.w, p.h)) {
+                            // 直接瞬移到目标高度
+                            p.y = stepY;
+                            p.x = newX;
+                            p.vy = 0;
+                            console.log('[physics] 台阶瞬移:', Math.floor(p.x), Math.floor(p.y));
+                        } else {
+                            p.vx = 0;
+                        }
+                    } else {
+                        p.vx = 0;
+                    }
+                }
+
+                // 垂直碰撞
+                const newY = p.y + p.vy * dt;
+                if (!this.checkCollision(p.x, newY, p.w, p.h)) {
+                    p.y = newY;
+                    p.onGround = false;
+
+                    // 平台 snap：下落时检测是否踩到平台（从上方落下才 snap）
+                    if (p.vy >= 0 && !drop.active) {
+                        const footLeft  = Math.floor(p.x / CONFIG.TILE_SIZE);
+                        const footRight = Math.floor((p.x + p.w - 1) / CONFIG.TILE_SIZE);
+                        const footY     = Math.floor((p.y + p.h) / CONFIG.TILE_SIZE);
+                        for (let fx = footLeft; fx <= footRight; fx++) {
+                            if (World.getBlock(fx, footY) === 'platform') {
+                                const platTop = footY * CONFIG.TILE_SIZE;
+                                const prevBottom = (p.y - p.vy * dt) + p.h; // 移动前的底部位置
+                                // 只有上一帧在平台顶部以上，且这一帧进入平台区域，才 snap
+                                if (prevBottom <= platTop + 4 && p.y + p.h >= platTop) {
+                                    p.y = platTop - p.h;
+                                    p.vy = 0;
+                                    p.onGround = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (p.vy > 0) p.onGround = true;
+                    p.vy = 0;
+                }
+
+                // 边界：虚空，不限制
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Camera (相机系统)
+        // ============================================================
+        const Camera = {
+            update() {
+                const p = State.player;
+                const c = State.camera;
+                const cw = DOM.canvas.width;
+                const ch = DOM.canvas.height;
+                c.x = p.x + p.w / 2 - cw / 2;
+                c.y = p.y + p.h / 2 - ch / 2;
+            },
+
+            screenToWorld(sx, sy) {
+                return {
+                    x: Math.floor((sx + State.camera.x) / CONFIG.TILE_SIZE),
+                    y: Math.floor((sy + State.camera.y) / CONFIG.TILE_SIZE)
+                };
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Renderer (渲染系统)
+        // ============================================================
+        const Renderer = {
+            cacheCanvas: null,
+            cacheCtx: null,
+            stars: [],
+
+            initCache() {
+                this.cacheCanvas = document.createElement('canvas');
+                this.cacheCanvas.width = CONFIG.WORLD_WIDTH * CONFIG.TILE_SIZE;
+                this.cacheCanvas.height = CONFIG.WORLD_HEIGHT * CONFIG.TILE_SIZE;
+                this.cacheCtx = this.cacheCanvas.getContext('2d');
+                this.stars = [];
+                for (let i = 0; i < 50; i++) {
+                    this.stars.push({ x: (i * 137.5) % 10000, y: (i * 73.3) % 10000 });
+                }
+                console.log('[renderer] 缓存初始化完成，尺寸:', this.cacheCanvas.width, 'x', this.cacheCanvas.height);
+            },
+
+            buildCache() {
+                const ctx = this.cacheCtx;
+                const ts = CONFIG.TILE_SIZE;
+                ctx.clearRect(0, 0, this.cacheCanvas.width, this.cacheCanvas.height);
+                for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
+                    for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
+                        const block = World.getBlock(x, y);
+                        if (block === 'air') continue;
+                        if (block === 'water') continue; // 水由主循环动态绘制
+                        const bx = x * ts;
+                        const by = y * ts;
+                        const data = BlockRegistry.get(block);
+                        if (!data || !data.color) continue;
+                        if (block === 'platform') {
+                            const platH = 8;
+                            const r = 8;
+                            ctx.fillStyle = '#C4956A';
+                            ctx.beginPath();
+                            ctx.moveTo(bx + r, by);
+                            ctx.lineTo(bx + ts - r, by);
+                            ctx.quadraticCurveTo(bx + ts, by, bx + ts, by + r);
+                            ctx.lineTo(bx + ts, by + platH - r);
+                            ctx.quadraticCurveTo(bx + ts, by + platH, bx + ts - r, by + platH);
+                            ctx.lineTo(bx + r, by + platH);
+                            ctx.quadraticCurveTo(bx, by + platH, bx, by + platH - r);
+                            ctx.lineTo(bx, by + r);
+                            ctx.quadraticCurveTo(bx, by, bx + r, by);
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.fillStyle = '#A07850';
+                            ctx.fillRect(bx + r, by, ts - r * 2, 2);
+                            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                            ctx.fillRect(bx, by, r, platH);
+                            ctx.fillRect(bx + ts - r, by, r, platH);
+                            ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                            ctx.fillRect(bx + 10, by + 3, 6, 1);
+                            ctx.fillRect(bx + 20, by + 5, 8, 1);
+                            ctx.fillRect(bx + 6, by + 7, 10, 1);
+                            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                            ctx.fillRect(bx + r, by + platH - 1, ts - r * 2, 1);
+                        } else {
+                            ctx.fillStyle = data.color;
+                            ctx.fillRect(bx, by, ts, ts);
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                            ctx.fillRect(bx, by, ts, 2);
+                            ctx.fillRect(bx, by, 2, ts);
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                            ctx.fillRect(bx + ts - 2, by, 2, ts);
+                            ctx.fillRect(bx, by + ts - 2, ts, 2);
+                            if (block === 'dirt' || block === 'grass') {
+                                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                                ctx.fillRect(bx + 8, by + 12, 4, 4);
+                                ctx.fillRect(bx + 20, by + 6, 3, 3);
+                            }
+                        }
+                    }
+                }
+                console.log('[renderer] 地形缓存构建完成');
+            },
+
+            updateCacheBlock(x, y) {
+                if (!this.cacheCtx) return;
+                const ctx = this.cacheCtx;
+                const ts = CONFIG.TILE_SIZE;
+                const bx = x * ts;
+                const by = y * ts;
+                const block = World.getBlock(x, y);
+                ctx.clearRect(bx, by, ts, ts);
+                if (block === 'air') return;
+                if (block === 'water') { ctx.clearRect(bx, by, ts, ts); return; } // 水由主循环动态绘制
+                const data = BlockRegistry.get(block);
+                if (!data || !data.color) return;
+                if (block === 'platform') {
+                    const platH = 8;
+                    const r = 8;
+                    ctx.fillStyle = '#C4956A';
+                    ctx.beginPath();
+                    ctx.moveTo(bx + r, by);
+                    ctx.lineTo(bx + ts - r, by);
+                    ctx.quadraticCurveTo(bx + ts, by, bx + ts, by + r);
+                    ctx.lineTo(bx + ts, by + platH - r);
+                    ctx.quadraticCurveTo(bx + ts, by + platH, bx + ts - r, by + platH);
+                    ctx.lineTo(bx + r, by + platH);
+                    ctx.quadraticCurveTo(bx, by + platH, bx, by + platH - r);
+                    ctx.lineTo(bx, by + r);
+                    ctx.quadraticCurveTo(bx, by, bx + r, by);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#A07850';
+                    ctx.fillRect(bx + r, by, ts - r * 2, 2);
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(bx, by, r, platH);
+                    ctx.fillRect(bx + ts - r, by, r, platH);
+                    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                    ctx.fillRect(bx + 10, by + 3, 6, 1);
+                    ctx.fillRect(bx + 20, by + 5, 8, 1);
+                    ctx.fillRect(bx + 6, by + 7, 10, 1);
+                    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                    ctx.fillRect(bx + r, by + platH - 1, ts - r * 2, 1);
+                } else {
+                    ctx.fillStyle = data.color;
+                    ctx.fillRect(bx, by, ts, ts);
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    ctx.fillRect(bx, by, ts, 2);
+                    ctx.fillRect(bx, by, 2, ts);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.fillRect(bx + ts - 2, by, 2, ts);
+                    ctx.fillRect(bx, by + ts - 2, ts, 2);
+                    if (block === 'dirt' || block === 'grass') {
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                        ctx.fillRect(bx + 8, by + 12, 4, 4);
+                        ctx.fillRect(bx + 20, by + 6, 3, 3);
+                    }
+                }
+            },
+
+            drawCache() {
+                if (!this.cacheCanvas) return;
+                const ctx = DOM.ctx;
+                const c = State.camera;
+                ctx.drawImage(
+                    this.cacheCanvas,
+                    c.x, c.y, DOM.canvas.width, DOM.canvas.height,
+                    0, 0, DOM.canvas.width, DOM.canvas.height
+                );
+            },
+
+            drawSky() {
+                const ctx = DOM.ctx;
+                const cw = DOM.canvas.width;
+                const ch = DOM.canvas.height;
+                const grad = ctx.createLinearGradient(0, 0, 0, ch);
+                grad.addColorStop(0, '#1a1a3e');
+                grad.addColorStop(0.5, '#2d2d5a');
+                grad.addColorStop(1, '#4a4a7a');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, cw, ch);
+            },
+
+            drawStars() {
+                const ctx = DOM.ctx;
+                const cw = DOM.canvas.width;
+                const ch = DOM.canvas.height;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                for (const s of this.stars) {
+                    const sx = ((s.x + State.camera.x * 0.1) % cw + cw) % cw;
+                    const sy = (s.y % (ch * 0.6));
+                    ctx.fillRect(sx, sy, 2, 2);
+                }
+            },
+
+            drawBlocks() {
+                const ctx = DOM.ctx;
+                const c = State.camera;
+                const ts = CONFIG.TILE_SIZE;
+                const startX = Math.max(0, Math.floor(c.x / ts));
+                const endX   = Math.min(CONFIG.WORLD_WIDTH,  Math.ceil((c.x + DOM.canvas.width)  / ts) + 1);
+                const startY = Math.max(0, Math.floor(c.y / ts));
+                const endY   = Math.min(CONFIG.WORLD_HEIGHT, Math.ceil((c.y + DOM.canvas.height) / ts) + 1);
+
+                for (let x = startX; x < endX; x++) {
+                    for (let y = startY; y < endY; y++) {
+                        const block = World.getBlock(x, y);
+                        if (block === 'air') continue;
+
+                        const bx = x * ts - c.x;
+                        const by = y * ts - c.y;
+                        const data = BlockRegistry.get(block);
+                        if (!data || !data.color) continue;
+
+                        // 平台：跳过通用整格绘制，下方保持天空透明，只画顶部8px木板条
+                        if (block === 'platform') {
+                            const platH = 8;
+                            const r = 8;
+                            // 主体木板条（圆角矩形，只占顶部8px）
+                            ctx.fillStyle = '#C4956A';
+                            ctx.beginPath();
+                            ctx.moveTo(bx + r, by);
+                            ctx.lineTo(bx + ts - r, by);
+                            ctx.quadraticCurveTo(bx + ts, by, bx + ts, by + r);
+                            ctx.lineTo(bx + ts, by + platH - r);
+                            ctx.quadraticCurveTo(bx + ts, by + platH, bx + ts - r, by + platH);
+                            ctx.lineTo(bx + r, by + platH);
+                            ctx.quadraticCurveTo(bx, by + platH, bx, by + platH - r);
+                            ctx.lineTo(bx, by + r);
+                            ctx.quadraticCurveTo(bx, by, bx + r, by);
+                            ctx.closePath();
+                            ctx.fill();
+                            // 顶部深色边线
+                            ctx.fillStyle = '#A07850';
+                            ctx.fillRect(bx + r, by, ts - r * 2, 2);
+                            // 侧面阴影
+                            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                            ctx.fillRect(bx, by, r, platH);
+                            ctx.fillRect(bx + ts - r, by, r, platH);
+                            // 木纹细节
+                            ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                            ctx.fillRect(bx + 10, by + 3, 6, 1);
+                            ctx.fillRect(bx + 20, by + 5, 8, 1);
+                            ctx.fillRect(bx + 6, by + 7, 10, 1);
+                            // 底部高光
+                            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                            ctx.fillRect(bx + r, by + platH - 1, ts - r * 2, 1);
+                        } else {
+                            // 其他方块：通用整格绘制
+                            ctx.fillStyle = data.color;
+                            ctx.fillRect(bx, by, ts, ts);
+
+                            // 阴影高光
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                            ctx.fillRect(bx, by, ts, 2);
+                            ctx.fillRect(bx, by, 2, ts);
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                            ctx.fillRect(bx + ts - 2, by, 2, ts);
+                            ctx.fillRect(bx, by + ts - 2, ts, 2);
+
+                            // 泥土/草地细节
+                            if (block === 'dirt' || block === 'grass') {
+                                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                                ctx.fillRect(bx + 8,  by + 12, 4, 4);
+                                ctx.fillRect(bx + 20, by + 6,  3, 3);
+                            }
+                        }
+                    }
+                }
+            },
+
+            drawWater() {
+                const ctx = DOM.ctx;
+                const c = State.camera;
+                const ts = CONFIG.TILE_SIZE;
+                const time = Date.now() / 1000;
+                const startX = Math.max(0, Math.floor(c.x / ts));
+                const endX   = Math.min(CONFIG.WORLD_WIDTH,  Math.ceil((c.x + DOM.canvas.width)  / ts) + 1);
+                const startY = Math.max(0, Math.floor(c.y / ts));
+                const endY   = Math.min(CONFIG.WORLD_HEIGHT, Math.ceil((c.y + DOM.canvas.height) / ts) + 1);
+                for (let x = startX; x < endX; x++) {
+                    for (let y = startY; y < endY; y++) {
+                        if (World.getBlock(x, y) !== 'water') continue;
+                        const bx = x * ts - c.x;
+                        const by = y * ts - c.y;
+                        const waveY = Math.sin(time * 2 + x * 0.5) * 2;
+                        const alpha = 0.5 + Math.sin(time * 3 + x * 0.7 + y * 0.5) * 0.15;
+                        ctx.fillStyle = `rgba(65, 105, 225, ${alpha})`;
+                        ctx.fillRect(bx, by + waveY, ts, ts);
+                        // 水面高光
+                        ctx.fillStyle = `rgba(255, 255, 255, ${0.1 + Math.sin(time * 4 + x) * 0.05})`;
+                        ctx.fillRect(bx, by + waveY, ts, 2);
+                    }
+                }
+            },
+
+            drawPlayer() {
+                const ctx = DOM.ctx;
+                const p = State.player;
+                const c = State.camera;
+                const px = p.x - c.x;
+                const py = p.y - c.y;
+
+                // 身体
+                ctx.fillStyle = '#4a90d9';
+                ctx.fillRect(px, py + 16, p.w, p.h - 16);
+                // 头
+                ctx.fillStyle = '#ffccaa';
+                ctx.fillRect(px + 2, py, 20, 16);
+                // 眼睛
+                ctx.fillStyle = '#333';
+                if (p.facingRight) {
+                    ctx.fillRect(px + 14, py + 5, 4, 4);
+                } else {
+                    ctx.fillRect(px + 6, py + 5, 4, 4);
+                }
+                // 脚
+                ctx.fillStyle = '#3a5080';
+                ctx.fillRect(px + 2,  py + p.h - 8, 8, 8);
+                ctx.fillRect(px + 14, py + p.h - 8, 8, 8);
+
+                // 工具/武器
+                ctx.save();
+                ctx.translate(px + p.w / 2, py + 20);
+                if (p.facingRight) {
+                    ctx.rotate(-0.3);
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(0, -4, 24, 6);
+                    ctx.fillStyle = '#aaa';
+                    ctx.fillRect(20, -8, 8, 14);
+                } else {
+                    ctx.rotate(0.3);
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(-24, -4, 24, 6);
+                    ctx.fillStyle = '#aaa';
+                    ctx.fillRect(-28, -8, 8, 14);
+                }
+                ctx.restore();
+            },
+
+            drawHighlight() {
+                const ctx = DOM.ctx;
+                const mx = State.mouseWorldX;
+                const my = State.mouseWorldY;
+                if (mx < 0 || mx >= CONFIG.WORLD_WIDTH || my < 0 || my >= CONFIG.WORLD_HEIGHT) {
+                    return;
+                }
+                const ts = CONFIG.TILE_SIZE;
+                const hx = mx * ts - State.camera.x;
+                const hy = my * ts - State.camera.y;
+                ctx.strokeStyle = State.isDigging
+                    ? 'rgba(255, 80, 80, 0.8)'
+                    : 'rgba(255, 255, 100, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(hx, hy, ts, ts);
+            },
+
+            render() {
+                this.drawSky();
+                this.drawStars();
+                this.drawCache();
+                this.drawWater();
+                this.drawPlayer();
+                this.drawHighlight();
+            }
+        };
+
+        // ============================================================
+        //  MODULE: LongPressHandler (长按定时器封装)
+        // ============================================================
+        const LongPressHandler = {
+            timer: null,
+            repeatTimer: null,
+            start(onEnter, onRepeat, delay, interval) {
+                this.end();
+                this.timer = setTimeout(() => {
+                    this.timer = null;
+                    onEnter();
+                    onRepeat();
+                    this.repeatTimer = setInterval(onRepeat, interval);
+                }, delay);
+            },
+            end() {
+                if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+                if (this.repeatTimer) { clearInterval(this.repeatTimer); this.repeatTimer = null; }
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Input (输入处理)
+        // ============================================================
+        const Input = {
+            init() {
+                // 画布 Pointer Events（统一替代 touch + mouse）
+                DOM.canvas.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    DOM.canvas.setPointerCapture(e.pointerId);
+                    this.onCanvasStart(e);
+                });
+                DOM.canvas.addEventListener('pointermove', (e) => {
+                    this.onCanvasMove(e);
+                    if (e.pointerType !== 'touch') {
+                        this.onCanvasHover(e);
+                    }
+                });
+                DOM.canvas.addEventListener('pointerup', (e) => {
+                    DOM.canvas.releasePointerCapture(e.pointerId);
+                    this.onCanvasEnd(e);
+                });
+                DOM.canvas.addEventListener('pointerleave', (e) => {
+                    if (InputState.isTouchDown) this.onCanvasEnd(e);
+                });
+                DOM.canvas.addEventListener('pointercancel', (e) => {
+                    DOM.canvas.releasePointerCapture(e.pointerId);
+                    this.onCanvasEnd(e);
+                });
+                DOM.canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+
+                // 方向键 Pointer Events
+                DOM.dpadBtns.forEach(btn => {
+                    const key = btn.dataset.key;
+                    const down = (e) => { e.preventDefault(); State.keys[key] = true; };
+                    const up   = (e) => { State.keys[key] = false; };
+                    btn.addEventListener('pointerdown', down);
+                    btn.addEventListener('pointerup',   up);
+                    btn.addEventListener('pointerleave',up);
+                    btn.addEventListener('pointercancel',up);
+                });
+                // 方向键上键不再触发跳跃，仅保留 keys.up 供未来攀爬使用
+
+                // 键盘
+                window.addEventListener('keydown', this.onKeyDown.bind(this));
+                window.addEventListener('keyup',   this.onKeyUp.bind(this));
+
+                // 跳跃按钮 Pointer Events
+                const jumpDown = (e) => { e.preventDefault(); State.keys.jump = true; };
+                const jumpUp   = (e) => { State.keys.jump = false; };
+                DOM.jumpBtn.addEventListener('pointerdown', jumpDown);
+                DOM.jumpBtn.addEventListener('pointerup',   jumpUp);
+                DOM.jumpBtn.addEventListener('pointerleave',jumpUp);
+                DOM.jumpBtn.addEventListener('pointercancel',jumpUp);
+
+                // 动作按钮 Pointer Events（替代 click，消除 300ms 延迟）
+                DOM.actionBtn.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    State.isDigging = !State.isDigging;
+                    DOM.actionBtn.textContent = State.isDigging ? '⛏' : '🧱';
+                    DOM.actionBtn.style.background = State.isDigging
+                        ? 'rgba(180, 60, 60, 0.7)'
+                        : 'rgba(60, 120, 60, 0.7)';
+                    DOM.actionBtn.style.borderColor = State.isDigging ? '#a05050' : '#50a050';
+                });
+
+                console.log('[input] 输入系统初始化完成 (Pointer Events)');
+            },
+
+            getCanvasCoords(e) {
+                const rect = DOM.canvas.getBoundingClientRect();
+                return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            },
+
+            doRepeatAction() {
+                const ts = CONFIG.TILE_SIZE;
+                const wx = Math.floor((InputState.touchCurrentX + State.camera.x) / ts);
+                const wy = Math.floor((InputState.touchCurrentY + State.camera.y) / ts);
+                State.mouseWorldX = wx;
+                State.mouseWorldY = wy;
+                if (wx < 0 || wx >= CONFIG.WORLD_WIDTH || wy < 0 || wy >= CONFIG.WORLD_HEIGHT) {
+                    return;
+                }
+                if (State.isDigging) {
+                    World.setBlock(wx, wy, 'air');
+                } else {
+                    const p = State.player;
+                    const bx = wx * ts;
+                    const by = wy * ts;
+                    // 像素级 AABB：玩家矩形与目标方块矩形是否重叠
+                    const overlap = !(bx + ts <= p.x || bx >= p.x + p.w ||
+                                      by + ts <= p.y || by >= p.y + p.h);
+                    if (!overlap) {
+                        World.setBlock(wx, wy, State.selectedBlock);
+                    }
+                }
+            },
+
+            onCanvasStart(e) {
+                e.preventDefault();
+                InputState.isTouchDown = true;
+                InputState.isLongPress = false;
+                const coords = this.getCanvasCoords(e);
+                InputState.touchStartX = coords.x;
+                InputState.touchStartY = coords.y;
+                InputState.touchCurrentX = coords.x;
+                InputState.touchCurrentY = coords.y;
+                this.doRepeatAction();
+
+                LongPressHandler.start(
+                    () => {
+                        InputState.isLongPress = true;
+                        console.log('[input] 进入长按连续模式');
+                    },
+                    () => {
+                        if (InputState.isTouchDown) {
+                            this.doRepeatAction();
+                        }
+                    },
+                    CONFIG.LONG_PRESS_DELAY,
+                    CONFIG.REPEAT_INTERVAL
+                );
+            },
+
+            onCanvasMove(e) {
+                if (!InputState.isTouchDown) return;
+                const coords = this.getCanvasCoords(e);
+                InputState.touchCurrentX = coords.x;
+                InputState.touchCurrentY = coords.y;
+                const ts = CONFIG.TILE_SIZE;
+                State.mouseWorldX = Math.floor((coords.x + State.camera.x) / ts);
+                State.mouseWorldY = Math.floor((coords.y + State.camera.y) / ts);
+                // 移动手指更新瞄准位置，但不取消长按
+                // 连续挖掘/放置由 LongPressHandler 的 repeatTimer 驱动
+            },
+
+            onCanvasEnd(e) {
+                InputState.isTouchDown = false;
+                LongPressHandler.end();
+                InputState.isLongPress = false;
+                console.log('[input] 画布操作结束');
+            },
+
+            onCanvasHover(e) {
+                if (InputState.isTouchDown) return;
+                const rect = DOM.canvas.getBoundingClientRect();
+                State.mouseScreenX = e.clientX - rect.left;
+                State.mouseScreenY = e.clientY - rect.top;
+                const sw = Camera.screenToWorld(State.mouseScreenX, State.mouseScreenY);
+                State.mouseWorldX = sw.x;
+                State.mouseWorldY = sw.y;
+            },
+
+            onKeyDown(e) {
+                switch (e.key) {
+                    case 'ArrowLeft':  case 'a': State.keys.left  = true; break;
+                    case 'ArrowRight': case 'd': State.keys.right = true; break;
+                    case 'ArrowUp':    case 'w': case ' ': State.keys.jump = true; break;
+                    case 'ArrowDown':  case 's': State.keys.down  = true; break;
+                }
+            },
+
+            onKeyUp(e) {
+                switch (e.key) {
+                    case 'ArrowLeft':  case 'a': State.keys.left  = false; break;
+                    case 'ArrowRight': case 'd': State.keys.right = false; break;
+                    case 'ArrowUp':    case 'w': case ' ': State.keys.jump = false; break;
+                    case 'ArrowDown':  case 's': State.keys.down  = false; break;
+                }
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Fullscreen (全屏控制)
+        // ============================================================
+        const Fullscreen = {
+            getElement() {
+                return document.fullscreenElement
+                    || document.webkitFullscreenElement
+                    || document.mozFullScreenElement
+                    || document.msFullscreenElement
+                    || null;
+            },
+
+            isSupported() {
+                const el = document.documentElement;
+                return !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
+            },
+
+            async enter() {
+                const el = document.documentElement;
+                try {
+                    if (el.requestFullscreen)       await el.requestFullscreen();
+                    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                    else if (el.mozRequestFullScreen)    el.mozRequestFullScreen();
+                    else if (el.msRequestFullscreen)     el.msRequestFullscreen();
+                } catch (err) {
+                    console.warn('[fullscreen] 进入全屏失败:', err);
+                    throw err;
+                }
+            },
+
+            async exit() {
+                try {
+                    if (document.exitFullscreen)       await document.exitFullscreen();
+                    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                    else if (document.mozCancelFullScreen)    document.mozCancelFullScreen();
+                    else if (document.msExitFullscreen)       document.msExitFullscreen();
+                } catch (err) {
+                    console.warn('[fullscreen] 退出全屏失败:', err);
+                    throw err;
+                }
+            },
+
+            async lockLandscape() {
+                if (screen.orientation && screen.orientation.lock) {
+                    try { await screen.orientation.lock('landscape'); } catch (e) {}
+                }
+            },
+
+            async unlockOrientation() {
+                if (screen.orientation && screen.orientation.unlock) {
+                    try { screen.orientation.unlock(); } catch (e) {}
+                }
+            },
+
+            updateBtn() {
+                const btn = DOM.fullscreenBtn;
+                if (this.getElement()) {
+                    btn.innerHTML = '⛶';
+                    btn.style.borderColor = '#88ff88';
+                    btn.style.background = 'rgba(30, 60, 30, 0.85)';
+                    btn.title = '退出全屏';
+                } else {
+                    btn.innerHTML = '⛶';
+                    btn.style.borderColor = '#4a4a6a';
+                    btn.style.background = 'rgba(30, 30, 50, 0.85)';
+                    btn.title = '全屏切换';
+                }
+            },
+
+            showFeedback(success) {
+                const btn = DOM.fullscreenBtn;
+                const oldBg = btn.style.background;
+                btn.style.background = success
+                    ? 'rgba(60, 120, 60, 0.9)'
+                    : 'rgba(180, 60, 60, 0.9)';
+                setTimeout(() => {
+                    btn.style.background = oldBg;
+                    this.updateBtn();
+                }, 300);
+            },
+
+            init() {
+                DOM.fullscreenBtn.addEventListener('click', async () => {
+                    if (this.getElement()) {
+                        try {
+                            await this.exit();
+                            await this.unlockOrientation();
+                            this.showFeedback(true);
+                        } catch (err) {
+                            this.showFeedback(false);
+                        }
+                    } else {
+                        try {
+                            await this.enter();
+                            await this.lockLandscape();
+                            this.showFeedback(true);
+                        } catch (err) {
+                            this.showFeedback(false);
+                            if (!this.isSupported()) {
+                                try { await this.lockLandscape(); } catch (e2) {}
+                            }
+                        }
+                    }
+                });
+
+                ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
+                    document.addEventListener(evt, () => this.updateBtn());
+                });
+                this.updateBtn();
+                console.log('[fullscreen] 全屏控制初始化完成');
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Console (内置控制台)
+        // ============================================================
+        const ConsoleModule = {
+            autoScroll: true,
+            history: [],
+            historyIndex: -1,
+            lastToggleTime: 0,
+            touchActive: false,
+            lastTouchY: 0,
+            lastScrollTop: -1,
+
+            init() {
+                const panel   = DOM.consolePanel;
+                const content = DOM.consoleContent;
+                const input   = DOM.consoleInput;
+                const header  = DOM.consoleHeader;
+                const autoBtn = DOM.consoleAuto;
+                const clearBtn= DOM.consoleClear;
+                const toggle  = DOM.consoleToggle;
+
+                if (!panel || !content || !input || !header || !autoBtn || !clearBtn || !toggle) {
+                    console.error('[console] 控制台 DOM 元素缺失，跳过初始化');
+                    return;
+                }
+
+                // 劫持原生 console
+                const origLog   = console.log;
+                const origWarn  = console.warn;
+                const origError = console.error;
+                const origInfo  = console.info;
+                console.__orig = { log: origLog, warn: origWarn, error: origError, info: origInfo };
+
+                console.log   = (...args) => { origLog.apply(this, args);   this.appendLine('log',   this.stringifyArgs(args)); };
+                console.warn  = (...args) => { origWarn.apply(this, args);  this.appendLine('warn',  this.stringifyArgs(args)); };
+                console.error = (...args) => { origError.apply(this, args); this.appendLine('error', this.stringifyArgs(args)); };
+                console.info  = (...args) => { origInfo.apply(this, args);  this.appendLine('info',  this.stringifyArgs(args)); };
+
+                // 全局错误捕获
+                window.onerror = (msg, url, line, col, err) => {
+                    const text = err && err.stack
+                        ? err.stack
+                        : (msg + ' at ' + (url || '?') + ':' + line + ':' + col);
+                    this.appendLine('error', text);
+                    return false;
+                };
+                window.addEventListener('error', (e) => {
+                    if (e.error && e.error.stack) {
+                        this.appendLine('error', e.error.stack);
+                    } else {
+                        this.appendLine('error', e.message + ' at ' + (e.filename || '?') + ':' + e.lineno + ':' + e.colno);
+                    }
+                });
+                window.addEventListener('unhandledrejection', (e) => {
+                    const reason = e.reason;
+                    if (reason instanceof Error) {
+                        this.appendLine('error', 'Unhandled Promise Rejection: ' + (reason.stack || reason.message));
+                    } else {
+                        this.appendLine('error', 'Unhandled Promise Rejection: ' + String(reason));
+                    }
+                });
+
+                // 触摸滚动调试
+                content.addEventListener('touchstart', (e) => {
+                    this.touchActive = true;
+                    this.lastTouchY = e.touches[0].clientY;
+                    this.lastScrollTop = content.scrollTop;
+                }, { passive: true });
+                content.addEventListener('touchmove', (e) => {
+                    if (!this.touchActive) return;
+                    const y = e.touches[0].clientY;
+                    const st = content.scrollTop;
+                    if (st !== this.lastScrollTop || Math.abs(y - this.lastTouchY) > 20) {
+                        this.lastTouchY = y;
+                        this.lastScrollTop = st;
+                    }
+                }, { passive: true });
+                content.addEventListener('touchend', () => { this.touchActive = false; }, { passive: true });
+
+                // 面板展开/收起
+                const togglePanel = () => {
+                    const isCollapsed = panel.classList.toggle('collapsed');
+                    console.log('[console] 控制台' + (isCollapsed ? '收起' : '展开'));
+                };
+                header.addEventListener('pointerdown', (e) => {
+                    if (['consoleClear', 'consoleToggle', 'consoleAuto'].includes(e.target.id)) return;
+                    togglePanel();
+                });
+                toggle.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    togglePanel();
+                });
+
+                // 复制
+                const copyBtn = document.getElementById('consoleCopy');
+                if (copyBtn) {
+                    copyBtn.addEventListener('pointerdown', (e) => {
+                        e.stopPropagation();
+                        const text = Array.from(content.children)
+                            .map(div => div.textContent)
+                            .join('\n');
+                        if (text && navigator.clipboard) {
+                            navigator.clipboard.writeText(text).then(() => {
+                                const old = copyBtn.textContent;
+                                copyBtn.textContent = '已复制';
+                                setTimeout(() => copyBtn.textContent = old, 800);
+                            }).catch(() => {
+                                this.appendLine('warn', '复制失败，浏览器可能不支持');
+                            });
+                        } else {
+                            this.appendLine('warn', '无内容可复制或剪贴板不可用');
+                        }
+                    });
+                }
+
+                // 清空
+                clearBtn.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    content.innerHTML = '';
+                    console.log('[console] 已清空');
+                });
+
+                // 自动滚动切换
+                autoBtn.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    const now = Date.now();
+                    if (now - this.lastToggleTime < 300) return;
+                    this.lastToggleTime = now;
+                    this.autoScroll = !this.autoScroll;
+                    if (this.autoScroll) {
+                        autoBtn.classList.remove('auto-off');
+                        autoBtn.classList.add('auto-on');
+                        content.scrollTop = content.scrollHeight;
+                    } else {
+                        autoBtn.classList.remove('auto-on');
+                        autoBtn.classList.add('auto-off');
+                    }
+                    console.log('[console] 自动滚动' + (this.autoScroll ? '开启' : '关闭'));
+                });
+
+                // 输入执行
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.keyCode === 13) {
+                        e.preventDefault();
+                        this.executeInput();
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (this.historyIndex > 0) {
+                            this.historyIndex--;
+                            input.value = this.history[this.historyIndex];
+                        }
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (this.historyIndex < this.history.length - 1) {
+                            this.historyIndex++;
+                            input.value = this.history[this.historyIndex];
+                        } else {
+                            this.historyIndex = this.history.length;
+                            input.value = '';
+                        }
+                    }
+                });
+                input.addEventListener('change', () => {
+                    if (input.value.trim()) this.executeInput();
+                });
+
+                this.appendLine('info', '控制台就绪。输入 JS 代码按回车执行。');
+                console.log('[console] 控制台初始化完成');
+            },
+
+            nowTime() {
+                const d = new Date();
+                const pad = (n) => n.toString().padStart(2, '0');
+                return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+            },
+
+            appendLine(type, text) {
+                try {
+                    const div = document.createElement('div');
+                    div.className = 'log-line log-' + type;
+                    div.innerHTML = '<span class="log-time">' + this.nowTime() + '</span>' + this.escapeHtml(String(text));
+                    DOM.consoleContent.appendChild(div);
+                    if (this.autoScroll) {
+                        DOM.consoleContent.scrollTop = DOM.consoleContent.scrollHeight;
+                    }
+                } catch (e) {
+                    const orig = console.__orig || console;
+                    orig.error('[console] appendLine 失败:', e);
+                }
+            },
+
+            escapeHtml(str) {
+                return str
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            },
+
+            stringifyArgs(args) {
+                return args.map(arg => {
+                    if (arg === null) return 'null';
+                    if (arg === undefined) return 'undefined';
+                    if (typeof arg === 'string') return arg;
+                    if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
+                    if (arg instanceof Error) return arg.stack || arg.message || String(arg);
+                    try {
+                        return JSON.stringify(arg, null, 2);
+                    } catch (e) {
+                        return String(arg);
+                    }
+                }).join(' ');
+            },
+
+            executeInput() {
+                const code = DOM.consoleInput.value.trim();
+                if (!code) return;
+                this.history.push(code);
+                this.historyIndex = this.history.length;
+                this.appendLine('info', '> ' + code);
+                try {
+                    const result = eval(code);
+                    if (result !== undefined) {
+                        this.appendLine('log', this.stringifyArgs([result]));
+                    }
+                } catch (err) {
+                    this.appendLine('error', err.stack || err.message || String(err));
+                }
+                DOM.consoleInput.value = '';
+                DOM.consoleInput.blur();
+            }
+        };
+
+        // ============================================================
+        //  MODULE: GameLoop (游戏主循环)
+        // ============================================================
+        const GameLoop = {
+            lastTime: 0,
+            tick(time) {
+                if (!this.lastTime) this.lastTime = time;
+                let dt = (time - this.lastTime) / 1000;
+                this.lastTime = time;
+                // 防止切后台或掉帧导致 dt 爆炸
+                if (dt > 0.1) dt = 0.1;
+                if (dt <= 0) dt = 0.001;
+
+                State.frameCount++;
+                Physics.update(dt);
+                Camera.update();
+                Renderer.render();
+                DOM.coordsEl.textContent = 'X:' + Math.floor(State.player.x / CONFIG.TILE_SIZE)
+                                         + ' Y:' + Math.floor(State.player.y / CONFIG.TILE_SIZE);
+                requestAnimationFrame((t) => this.tick(t));
+            },
+
+            start() {
+                console.log('[loop] 游戏循环启动');
+                this.lastTime = 0;
+                requestAnimationFrame((t) => this.tick(t));
+            }
+        };
+
+        // ============================================================
+        //  MODULE: App (应用初始化)
+        // ============================================================
+        const App = {
+            init() {
+                console.log('[app] ====== Simple Terraria v65 启动 ======');
+                initDOM();
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+
+                // 注册方块类型
+                BlockRegistry.register('air',      { color: null,               solid: false, icon: '',   tooltip: '空气' });
+                BlockRegistry.register('dirt',     { color: '#8B6F47',           solid: true,  icon: '土',   tooltip: '泥土',     uiColor: '#8B4513' });
+                BlockRegistry.register('stone',    { color: '#7a7a85',           solid: true,  icon: '石',   tooltip: '石头',     uiColor: '#708090' });
+                BlockRegistry.register('grass',    { color: '#4a8c3f',           solid: true,  icon: '草',   tooltip: '草',       uiColor: '#228B22' });
+                BlockRegistry.register('wood',     { color: '#a07040',           solid: true,  icon: '木',   tooltip: '木头',     uiColor: '#D2691E' });
+                BlockRegistry.register('sand',     { color: '#d4b896',           solid: true,  icon: '沙',   tooltip: '沙子',     uiColor: '#FFD700' });
+                BlockRegistry.register('water',    { color: 'rgba(65,105,225,0.6)', solid: false, icon: '水',   tooltip: '水',       uiColor: '#4169E1' });
+                BlockRegistry.register('platform', { color: '#C4956A',           solid: true,  icon: '台',   tooltip: '平台',     uiColor: '#C4956A' });
+                console.log('[app] 方块注册完成:', BlockRegistry.getAllPlaceable().join(', '));
+
+                // 动态生成方块选择器
+                const selector = document.getElementById('blockSelector');
+                BlockRegistry.getAllPlaceable().forEach((type, idx) => {
+                    const data = BlockRegistry.get(type);
+                    const btn = document.createElement('div');
+                    btn.className = 'block-btn' + (type === State.selectedBlock ? ' selected' : '');
+                    btn.style.background = data.uiColor || data.color || '#888';
+                    btn.dataset.type = type;
+                    btn.title = data.tooltip || type;
+                    btn.textContent = data.icon || type[0];
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.block-btn').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        State.selectedBlock = type;
+                        console.log('[input] 切换方块:', type);
+                    });
+                    selector.appendChild(btn);
+                });
+
+                World.init();
+                Renderer.initCache();
+                Renderer.buildCache();
+                Input.init();
+                Fullscreen.init();
+                ConsoleModule.init();
+                GameLoop.start();
+                console.log('[app] 初始化全部完成');
+            },
+
+            resize() {
+                DOM.canvas.width  = window.innerWidth;
+                DOM.canvas.height = window.innerHeight;
+                console.log('[app] 画布尺寸调整:', DOM.canvas.width, 'x', DOM.canvas.height);
+                // 横屏小屏自动降低控制台高度
+                const panel = DOM.consolePanel;
+                if (panel && !panel.classList.contains('collapsed')) {
+                    const h = window.innerHeight;
+                    const w = window.innerWidth;
+                    if (w > h && h < 500) {
+                        panel.style.height = '120px';
+                    } else if (w > h && h < 600) {
+                        panel.style.height = '150px';
+                    } else {
+                        panel.style.height = '';
+                    }
+                }
+            }
+        };
+
+        // ============================================================
+        //  启动应用
+        // ============================================================
+        App.init();
+
+    })();
+    </script>
+</body>
+</html>
