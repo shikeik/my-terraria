@@ -1224,9 +1224,17 @@
         //  MODULE: Input
         // ============================================================
         const Input = {
+            PinchState: {
+                isPinching: false,
+                startDist: 0,
+                startZoom: 1,
+                startCenter: { x: 0, y: 0 },
+                lastCenter: { x: 0, y: 0 }
+            },
             init() {
                 DOM.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
                 DOM.canvas.addEventListener('pointerdown', (e) => {
+                    if (this.PinchState.isPinching) return;
                     e.preventDefault();
                     DOM.canvas.setPointerCapture(e.pointerId);
                     this.onCanvasStart(e);
@@ -1251,6 +1259,58 @@
                     const delta = e.deltaY > 0 ? 1.1 : 0.9;
                     State.camera.zoom *= delta;
                 }, { passive: false });
+
+                // 双指缩放（仅统计在画布上的手指，UI上的手指不计入）
+                DOM.canvas.addEventListener('touchstart', (e) => {
+                    const canvasTouches = Array.from(e.touches).filter(t => t.target === DOM.canvas);
+                    if (canvasTouches.length >= 2) {
+                        const ps = this.PinchState;
+                        ps.isPinching = true;
+                        InputState.isTouchDown = false;
+                        InputState.lastGridX = -1;
+                        InputState.lastGridY = -1;
+                        const t0 = canvasTouches[0];
+                        const t1 = canvasTouches[1];
+                        ps.startDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+                        ps.startZoom = State.camera.zoom;
+                        ps.startCenter = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+                        ps.lastCenter = { ...ps.startCenter };
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+                DOM.canvas.addEventListener('touchmove', (e) => {
+                    if (!this.PinchState.isPinching) return;
+                    const canvasTouches = Array.from(e.touches).filter(t => t.target === DOM.canvas);
+                    if (canvasTouches.length < 2) return;
+                    e.preventDefault();
+                    const ps = this.PinchState;
+                    const t0 = canvasTouches[0];
+                    const t1 = canvasTouches[1];
+                    const newDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+                    const newCenter = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+                    const ratio = ps.startDist / newDist;
+                    const newZoom = ps.startZoom * ratio;
+                    const rect = DOM.canvas.getBoundingClientRect();
+                    const cx = newCenter.x - rect.left;
+                    const cy = newCenter.y - rect.top;
+                    const ch = window.innerHeight;
+                    const worldX = State.camera.x + cx * State.camera.zoom;
+                    const worldY = State.camera.y + (ch - cy) * State.camera.zoom;
+                    State.camera.zoom = newZoom;
+                    State.camera.x = worldX - cx * newZoom;
+                    State.camera.y = worldY - (ch - cy) * newZoom;
+                    const dx = (ps.lastCenter.x - newCenter.x) * newZoom;
+                    const dy = (newCenter.y - ps.lastCenter.y) * newZoom;
+                    State.camera.x += dx;
+                    State.camera.y += dy;
+                    ps.lastCenter = { ...newCenter };
+                }, { passive: false });
+                DOM.canvas.addEventListener('touchend', (e) => {
+                    if (e.touches.length < 2) this.PinchState.isPinching = false;
+                });
+                DOM.canvas.addEventListener('touchcancel', (e) => {
+                    this.PinchState.isPinching = false;
+                });
 
                 DOM.dpadBtns.forEach(btn => {
                     const key = btn.dataset.key;
@@ -1315,6 +1375,7 @@
             },
 
             onCanvasStart(e) {
+                if (this.PinchState.isPinching) return;
                 e.preventDefault();
                 InputState.isTouchDown = true;
                 const coords = this.getCanvasCoords(e);
