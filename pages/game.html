@@ -846,33 +846,18 @@
         const TerrainConfig = {
             SEED: 42,
             SURFACE: {
-                BASE_Y: 86,
-                AMP_LOW: 12,       // 低频振幅（大起伏）
-                FREQ_LOW: 0.015,   // 低频频率
-                AMP_HIGH: 3,       // 高频振幅（细节）
-                FREQ_HIGH: 0.06    // 高频频率
-            },
-            CAVE: {
-                THRESHOLD: 0.35,   // 噪声值 > 此阈值生成洞穴
-                FREQ: 0.05,
-                AMP: 1.0
+                BASE_Y: 200,
+                AMP_LOW: 30,
+                FREQ_LOW: 0.005,
+                AMP_HIGH: 5,
+                FREQ_HIGH: 0.02
             },
             LAYERS: {
-                // 从地表往下，各层深度（格数）由噪声控制
-                DIRT_DEPTH_MIN: 2,
-                DIRT_DEPTH_MAX: 6,
-                STONE_DEPTH_MIN: 10,
-                SAND_ZONE_START: 15,
-                SAND_ZONE_END: 30,
-                ICE_ZONE_START: 25,
-                ICE_ZONE_END: 40
-            },
-            WATER: {
-                CHANCE: 0.06,      // 洞穴中生成水的概率
-                MIN_DEPTH: 8       // 至少在地表下 8 格才可能出现水
+                DIRT_DEPTH_MIN: 4,
+                DIRT_DEPTH_MAX: 12
             },
             BIOME: {
-                FREQ: 0.008,       // 生物群落变化频率
+                FREQ: 0.003,
                 DESERT_THRESHOLD: 0.4,
                 SNOW_THRESHOLD: -0.4
             }
@@ -1368,80 +1353,46 @@
                 const T = TerrainConfig;
                 const noise = SimplexNoise;
 
-                // 生物群落噪声（低频大尺度）
                 const biomeNoise = (x) => noise.fbm(x, 0, 2, T.BIOME.FREQ, 0.5);
 
                 for (let x = 0; x < W; x++) {
                     State.world[x] = [];
 
-                    // 生物群落判定
                     const bVal = biomeNoise(x);
                     const isDesert = bVal > T.BIOME.DESERT_THRESHOLD;
                     const isSnow = bVal < T.BIOME.SNOW_THRESHOLD;
 
-                    // 地表高度：2 层噪声叠加
                     const nLow  = noise.fbm(x, 0, 2, T.SURFACE.FREQ_LOW,  0.5);
                     const nHigh = noise.fbm(x, 100, 2, T.SURFACE.FREQ_HIGH, 0.5);
-                    const surface = T.SURFACE.BASE_Y + nLow * T.SURFACE.AMP_LOW + nHigh * T.SURFACE.AMP_HIGH;
+                    const surface = Math.min(
+                        H - 5,
+                        T.SURFACE.BASE_Y + nLow * T.SURFACE.AMP_LOW + nHigh * T.SURFACE.AMP_HIGH
+                    );
 
-                    // 地层深度噪声（每列独立）
-                    const dirtDepth  = Math.floor(T.LAYERS.DIRT_DEPTH_MIN + Math.abs(noise.noise2D(x * 0.1, 50)) * (T.LAYERS.DIRT_DEPTH_MAX - T.LAYERS.DIRT_DEPTH_MIN));
-                    const stoneDepth = Math.floor(T.LAYERS.STONE_DEPTH_MIN + Math.abs(noise.noise2D(x * 0.08, 80)) * 8);
+                    const dirtDepth = Math.floor(
+                        T.LAYERS.DIRT_DEPTH_MIN +
+                        Math.abs(noise.noise2D(x * 0.1, 50)) *
+                        (T.LAYERS.DIRT_DEPTH_MAX - T.LAYERS.DIRT_DEPTH_MIN)
+                    );
 
                     for (let y = 0; y < H; y++) {
-                        const depthBelowSurface = surface - y; // 正值 = 地表以下
-                        let block = 'stone';
+                        const depth = surface - y;
+                        let block;
 
-                        // 天空
                         if (y >= surface) {
                             block = 'air';
-                        }
-                        // 地表表层
-                        else if (depthBelowSurface < 1) {
+                        } else if (depth < 1) {
                             block = isDesert ? 'sand' : (isSnow ? 'ice' : 'grass');
-                        }
-                        // 泥土层
-                        else if (depthBelowSurface < dirtDepth) {
+                        } else if (depth < dirtDepth) {
                             block = isDesert ? 'sand' : 'dirt';
-                        }
-                        // 石头层（主体）
-                        else {
+                        } else {
                             block = 'stone';
-                        }
-
-                        // 洞穴网络：2D 噪声阈值化（仅在地表以下一定深度）
-                        if (depthBelowSurface > 3 && depthBelowSurface < stoneDepth + 20) {
-                            const caveVal = noise.fbm(x, y, 3, T.CAVE.FREQ, T.CAVE.AMP);
-                            if (caveVal > T.CAVE.THRESHOLD) {
-                                block = 'air';
-                            }
-                        }
-
-                        // 沙层（特定深度区间，由噪声控制边界）
-                        const sandNoise = noise.noise2D(x * 0.04, y * 0.04);
-                        if (depthBelowSurface > T.LAYERS.SAND_ZONE_START && depthBelowSurface < T.LAYERS.SAND_ZONE_END && sandNoise > 0.2) {
-                            if (block !== 'air') block = 'sand';
-                        }
-
-                        // 冰层（更深处）
-                        const iceNoise = noise.noise2D(x * 0.03, y * 0.03 + 100);
-                        if (depthBelowSurface > T.LAYERS.ICE_ZONE_START && depthBelowSurface < T.LAYERS.ICE_ZONE_END && iceNoise > 0.3) {
-                            if (block !== 'air') block = 'ice';
-                        }
-
-                        // 水（洞穴中的空洞）
-                        if (depthBelowSurface > T.WATER.MIN_DEPTH && block === 'air') {
-                            const waterNoise = noise.noise2D(x * 0.02, y * 0.02 + 200);
-                            if (waterNoise > 0.5) {
-                                block = 'water';
-                            }
                         }
 
                         State.world[x][y] = block;
                     }
                 }
 
-                // 玩家重生点
                 State.player.x = CONFIG.RESPAWN.x * CONFIG.TILE_SIZE;
                 State.player.y = CONFIG.RESPAWN.y * CONFIG.TILE_SIZE;
                 State.player.vx = 0;
@@ -1449,27 +1400,6 @@
 
                 console.log('[world] 世界初始化完成，尺寸:', W, 'x', H);
                 console.log('[world] 玩家初始位置:', CONFIG.RESPAWN.x, CONFIG.RESPAWN.y);
-                console.log('[world] 地表基准:', T.SURFACE.BASE_Y);
-
-                // 固定水体结构（叠加在自然地形之上）
-                const pondMatrix = [
-                    '气气气气气气气气',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石水水水水水水石',
-                    '石石石石石石石石'
-                ];
-                this.placeStructure(pondMatrix, 5, 70);
             },
 
             // 矩阵第0行=顶部（所见即所得），内部翻转成左下坐标系
