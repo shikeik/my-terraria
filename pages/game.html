@@ -122,6 +122,7 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
     <div id="fullscreenBtn" title="全屏切换">⛶</div>
@@ -475,7 +476,8 @@
                 const terrainShader = {
                     uniforms: {
                         uAtlas: { value: atlas },
-                        uAtlasCount: { value: window.__ATLAS_COUNT || 8 }
+                        uTilesPerRow: { value: window.__ATLAS_TILES_PER_ROW || 32 },
+                        uAtlasRows: { value: window.__ATLAS_ROWS || 1 }
                     },
                     vertexShader: `
                         attribute float aTileIndex;
@@ -489,13 +491,16 @@
                     `,
                     fragmentShader: `
                         uniform sampler2D uAtlas;
-                        uniform float uAtlasCount;
+                        uniform float uTilesPerRow;
+                        uniform float uAtlasRows;
                         varying vec2 vUv;
                         varying float vTileIndex;
                         void main() {
                             // UV 内缩 0.05：消除图集粘连
                             vec2 innerUv = clamp(vUv, 0.05, 0.95);
-                            vec2 atlasUv = vec2((vTileIndex + innerUv.x) / uAtlasCount, innerUv.y);
+                            float col = mod(vTileIndex, uTilesPerRow);
+                            float row = floor(vTileIndex / uTilesPerRow);
+                            vec2 atlasUv = vec2((col + innerUv.x) / uTilesPerRow, (row + innerUv.y) / uAtlasRows);
                             gl_FragColor = texture2D(uAtlas, atlasUv);
                         }
                     `
@@ -1589,7 +1594,7 @@
         atlasCtx: null,
         atlasTexture: null,
         tileSize: 32,
-        atlasWidth: 0,
+        atlasWidth: 1024,
         atlasHeight: 32,
 
         init() {
@@ -1686,18 +1691,24 @@
         buildAtlas() {
             const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water', 'ice'];
             const s = this.tileSize;
-            this.atlasCtx.imageSmoothingEnabled = false;
-            this.atlasWidth = types.length * s;
+            const tilesPerRow = Math.floor(this.atlasWidth / s);
+            const rows = Math.ceil(types.length / tilesPerRow);
+            this.atlasHeight = rows * s;
             this.atlasCanvas.width = this.atlasWidth;
+            this.atlasCanvas.height = this.atlasHeight;
+            this.atlasCtx.imageSmoothingEnabled = false;
             this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
             types.forEach((type, i) => {
                 const tile = this.generate(type);
-                this.atlasCtx.drawImage(tile, i * s, 0);
+                const col = i % tilesPerRow;
+                const row = Math.floor(i / tilesPerRow);
+                this.atlasCtx.drawImage(tile, col * s, row * s);
                 const data = window.BlockRegistry.get(type);
                 if (data) data.tileIndex = i;
             });
-            console.log('[texture] 图集构建完成:', types.join(', '));
-            window.__ATLAS_COUNT = types.length;
+            console.log('[texture] 图集构建完成:', types.join(', '), '| 网格:', tilesPerRow + 'x' + rows, '| 尺寸:', this.atlasWidth + 'x' + this.atlasHeight);
+            window.__ATLAS_TILES_PER_ROW = tilesPerRow;
+            window.__ATLAS_ROWS = rows;
             return this.atlasCanvas;
         },
 
