@@ -161,7 +161,8 @@
             touchStartX: 0, touchStartY: 0,
             touchCurrentX: 0, touchCurrentY: 0,
             lastGridX: -1,
-            lastGridY: -1
+            lastGridY: -1,
+            actionMode: null  // 'dig' | 'place' | null（触屏时用 State.isDigging）
         };
 
         // ============================================================
@@ -427,7 +428,10 @@
                 const ts = CONFIG.TILE_SIZE;
                 this.highlightMesh.position.set(mx * ts + ts / 2, my * ts + ts / 2, 0);
                 this.highlightMesh.visible = true;
-                const color = State.isDigging ? 0xff5050 : 0xffff64;
+                // 高亮颜色：鼠标按键优先，触屏用 State.isDigging
+                const isDigging = InputState.actionMode === 'dig' ||
+                                  (InputState.actionMode === null && State.isDigging);
+                const color = isDigging ? 0xff5050 : 0xffff64;
                 this.highlightMesh.material.color.setHex(color);
             },
 
@@ -968,7 +972,12 @@
                 State.mouseWorldX = coords.x;
                 State.mouseWorldY = coords.y;
                 if (coords.x < 0 || coords.x >= CONFIG.WORLD_WIDTH || coords.y < 0 || coords.y >= CONFIG.WORLD_HEIGHT) return;
-                if (State.isDigging) {
+
+                // 操作模式：鼠标按键优先，触屏用 State.isDigging
+                const isDigging = InputState.actionMode === 'dig' ||
+                                  (InputState.actionMode === null && State.isDigging);
+
+                if (isDigging) {
                     World.setBlock(coords.x, coords.y, 'air');
                 } else {
                     const p = State.player;
@@ -992,6 +1001,16 @@
                 InputState.touchCurrentY = coords.y;
                 InputState.lastGridX = -1;
                 InputState.lastGridY = -1;
+
+                // 鼠标按键决定操作模式：左键挖掘，右键放置
+                if (e.pointerType === 'mouse') {
+                    if (e.button === 0) InputState.actionMode = 'dig';
+                    else if (e.button === 2) InputState.actionMode = 'place';
+                    else { InputState.isTouchDown = false; return; } // 中键忽略
+                } else {
+                    InputState.actionMode = null; // 触屏用 State.isDigging
+                }
+
                 this.doRepeatAction();
             },
 
@@ -1015,6 +1034,7 @@
                 InputState.isTouchDown = false;
                 InputState.lastGridX = -1;
                 InputState.lastGridY = -1;
+                InputState.actionMode = null;
                 console.log('[input] 画布操作结束');
             },
 
