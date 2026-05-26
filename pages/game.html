@@ -3,308 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>My Terraria v1 - Three.js 2D 世界生成</title>
+    <title>My Terraria v2 - Three.js 2D 直观坐标</title>
     <style>
-        /* ====== 全局重置 ====== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: none;
-        }
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #1a1a2e;
-            font-family: 'Courier New', monospace;
-        }
-
-        /* ====== 游戏画布容器 ====== */
-        #gameCanvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-
-        /* ====== 全屏按钮 ====== */
-        #fullscreenBtn {
-            position: fixed;
-            top: calc(12px + env(safe-area-inset-top));
-            right: calc(12px + env(safe-area-inset-right));
-            width: 44px;
-            height: 44px;
-            background: rgba(30, 30, 50, 0.85);
-            border: 2px solid #4a4a6a;
-            border-radius: 8px;
-            color: #e0e0e0;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 1000;
-            backdrop-filter: blur(4px);
-            user-select: none;
-        }
-        #fullscreenBtn:active {
-            background: rgba(50, 50, 80, 0.9);
-            border-color: #6a6a9a;
-            transform: scale(0.95);
-        }
-
-        /* ====== 信息面板 ====== */
-        #info {
-            position: fixed;
-            top: calc(12px + env(safe-area-inset-top));
-            left: calc(12px + env(safe-area-inset-left));
-            color: #aaa;
-            font-size: 12px;
-            z-index: 1000;
-            text-shadow: 1px 1px 0 #000;
-            pointer-events: none;
-        }
-
-        /* ====== 方向键 ====== */
-        #controls {
-            position: fixed;
-            bottom: calc(20px + env(safe-area-inset-bottom));
-            left: calc(20px + env(safe-area-inset-left));
-            z-index: 1000;
-            display: flex;
-            gap: 12px;
-        }
-        .dpad {
-            position: relative;
-            width: 140px;
-            height: 140px;
-        }
-        .dpad-btn {
-            position: absolute;
-            width: 44px;
-            height: 44px;
-            background: rgba(30, 30, 50, 0.7);
-            border: 2px solid #4a4a6a;
-            border-radius: 8px;
-            color: #aaa;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            user-select: none;
-        }
-        .dpad-btn:active {
-            background: rgba(60, 60, 100, 0.8);
-            border-color: #7a7aaa;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: 'Courier New', monospace; }
+        #gameCanvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+        #fullscreenBtn { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: 44px; height: 44px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-radius: 8px; color: #e0e0e0; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; backdrop-filter: blur(4px); user-select: none; }
+        #fullscreenBtn:active { background: rgba(50, 50, 80, 0.9); border-color: #6a6a9a; transform: scale(0.95); }
+        #info { position: fixed; top: calc(12px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); color: #aaa; font-size: 12px; z-index: 1000; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+        #controls { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); left: calc(20px + env(safe-area-inset-left)); z-index: 1000; display: flex; gap: 12px; }
+        .dpad { position: relative; width: 140px; height: 140px; }
+        .dpad-btn { position: absolute; width: 44px; height: 44px; background: rgba(30, 30, 50, 0.7); border: 2px solid #4a4a6a; border-radius: 8px; color: #aaa; font-size: 18px; display: flex; align-items: center; justify-content: center; user-select: none; }
+        .dpad-btn:active { background: rgba(60, 60, 100, 0.8); border-color: #7a7aaa; }
         .dpad-up    { top: 0; left: 48px; }
         .dpad-down  { bottom: 0; left: 48px; }
         .dpad-left  { top: 48px; left: 0; }
         .dpad-right { top: 48px; right: 0; }
-
-        /* ====== 动作按钮 ====== */
-        #actionBtn {
-            position: fixed;
-            bottom: calc(30px + env(safe-area-inset-bottom));
-            right: calc(30px + env(safe-area-inset-right));
-            width: 70px;
-            height: 70px;
-            background: rgba(180, 60, 60, 0.7);
-            border: 3px solid #a05050;
-            border-radius: 50%;
-            color: #fff;
-            font-size: 14px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            user-select: none;
-        }
-        #actionBtn:active {
-            background: rgba(220, 80, 80, 0.9);
-            transform: scale(0.92);
-        }
-
-        /* ====== 跳跃按钮 ====== */
-        #jumpBtn {
-            position: fixed;
-            bottom: calc(110px + env(safe-area-inset-bottom));
-            right: calc(30px + env(safe-area-inset-right));
-            width: 60px;
-            height: 60px;
-            background: rgba(60, 120, 180, 0.7);
-            border: 3px solid #5080a0;
-            border-radius: 50%;
-            color: #fff;
-            font-size: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            user-select: none;
-        }
-        #jumpBtn:active {
-            background: rgba(80, 160, 220, 0.9);
-            transform: scale(0.92);
-        }
-
-        /* ====== 方块选择器 ====== */
-        #blockSelector {
-            position: fixed;
-            top: calc(70px + env(safe-area-inset-top));
-            right: calc(12px + env(safe-area-inset-right));
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            z-index: 1000;
-        }
-        .block-btn {
-            width: 36px;
-            height: 36px;
-            border: 2px solid #4a4a6a;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            color: #fff;
-            text-shadow: 1px 1px 0 #000;
-        }
-        .block-btn.selected {
-            border-color: #ffff88;
-            box-shadow: 0 0 8px rgba(255, 255, 136, 0.4);
-        }
-
-        /* ====== 内置控制台 ====== */
-        #consolePanel {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #1e1e1e;
-            border-top: 1px solid #444;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            transition: height 0.2s ease;
-            height: clamp(140px, 25vh, 220px);
-            touch-action: auto;
-        }
-        #consolePanel.collapsed {
-            height: 32px !important;
-            padding-bottom: env(safe-area-inset-bottom);
-            touch-action: none;
-        }
-        #consolePanel.collapsed #consoleContent,
-        #consolePanel.collapsed #consoleInputWrap {
-            display: none;
-        }
-        #consolePanel.collapsed #consoleToggle {
-            transform: rotate(180deg);
-        }
-        #consoleHeader {
-            height: 32px;
-            background: #2d2d2d;
-            border-bottom: 1px solid #444;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 12px;
-            flex-shrink: 0;
-            user-select: none;
-            cursor: pointer;
-        }
-        #consoleTitle {
-            color: #ccc;
-            font-weight: bold;
-            font-size: 13px;
-        }
-        #consoleHeaderRight {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        #consoleClear,
-        #consoleAuto,
-        #consoleCopy,
-        #consoleToggle {
-            color: #888;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        #consoleCopy:active {
-            color: #75beff;
-        }
-        #consoleAuto.auto-on {
-            color: #88ff88;
-        }
-        #consoleAuto.auto-off {
-            color: #ff8888;
-            text-decoration: line-through;
-        }
-        #consoleToggle {
-            transition: transform 0.2s;
-        }
-        #consoleContent {
-            flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding: 6px 10px;
-            padding-bottom: calc(6px + env(safe-area-inset-bottom));
-            color: #d4d4d4;
-            line-height: 1.5;
-            -webkit-overflow-scrolling: touch;
-            touch-action: pan-y;
-            min-height: 0;
-            overscroll-behavior: contain;
-        }
-        #consoleContent .log-line {
-            margin-bottom: 2px;
-            word-break: break-all;
-            white-space: pre-wrap;
-        }
+        #actionBtn { position: fixed; bottom: calc(30px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 70px; height: 70px; background: rgba(180, 60, 60, 0.7); border: 3px solid #a05050; border-radius: 50%; color: #fff; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; }
+        #actionBtn:active { background: rgba(220, 80, 80, 0.9); transform: scale(0.92); }
+        #jumpBtn { position: fixed; bottom: calc(110px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 60px; height: 60px; background: rgba(60, 120, 180, 0.7); border: 3px solid #5080a0; border-radius: 50%; color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; }
+        #jumpBtn:active { background: rgba(80, 160, 220, 0.9); transform: scale(0.92); }
+        #blockSelector { position: fixed; top: calc(70px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); display: flex; flex-direction: column; gap: 6px; z-index: 1000; }
+        .block-btn { width: 36px; height: 36px; border: 2px solid #4a4a6a; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; }
+        .block-btn.selected { border-color: #ffff88; box-shadow: 0 0 8px rgba(255, 255, 136, 0.4); }
+        #consolePanel { position: fixed; bottom: 0; left: 0; right: 0; background: #1e1e1e; border-top: 1px solid #444; z-index: 9999; display: flex; flex-direction: column; font-family: 'Courier New', monospace; font-size: 13px; transition: height 0.2s ease; height: clamp(140px, 25vh, 220px); touch-action: auto; }
+        #consolePanel.collapsed { height: 32px !important; padding-bottom: env(safe-area-inset-bottom); touch-action: none; }
+        #consolePanel.collapsed #consoleContent, #consolePanel.collapsed #consoleInputWrap { display: none; }
+        #consolePanel.collapsed #consoleToggle { transform: rotate(180deg); }
+        #consoleHeader { height: 32px; background: #2d2d2d; border-bottom: 1px solid #444; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; flex-shrink: 0; user-select: none; cursor: pointer; }
+        #consoleTitle { color: #ccc; font-weight: bold; font-size: 13px; }
+        #consoleHeaderRight { display: flex; align-items: center; gap: 14px; }
+        #consoleClear, #consoleAuto, #consoleCopy, #consoleToggle { color: #888; font-size: 12px; cursor: pointer; }
+        #consoleCopy:active { color: #75beff; }
+        #consoleAuto.auto-on { color: #88ff88; }
+        #consoleAuto.auto-off { color: #ff8888; text-decoration: line-through; }
+        #consoleToggle { transition: transform 0.2s; }
+        #consoleContent { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 10px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); color: #d4d4d4; line-height: 1.5; -webkit-overflow-scrolling: touch; touch-action: pan-y; min-height: 0; overscroll-behavior: contain; }
+        #consoleContent .log-line { margin-bottom: 2px; word-break: break-all; white-space: pre-wrap; }
         #consoleContent .log-log   { color: #d4d4d4; }
         #consoleContent .log-warn  { color: #ffcc00; }
         #consoleContent .log-error { color: #ff4444; }
         #consoleContent .log-info  { color: #75beff; }
-        #consoleContent .log-time {
-            color: #666;
-            font-size: 11px;
-            margin-right: 6px;
-        }
-        #consoleInputWrap {
-            height: 36px;
-            border-top: 1px solid #444;
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            flex-shrink: 0;
-            background: #1e1e1e;
-        }
-        #consolePrompt {
-            color: #888;
-            margin-right: 8px;
-            font-size: 14px;
-        }
-        #consoleInput {
-            flex: 1;
-            background: transparent;
-            border: none;
-            outline: none;
-            color: #d4d4d4;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-        }
-        #consoleInput::placeholder {
-            color: #555;
-        }
+        #consoleContent .log-time { color: #666; font-size: 11px; margin-right: 6px; }
+        #consoleInputWrap { height: 36px; border-top: 1px solid #444; display: flex; align-items: center; padding: 0 10px; flex-shrink: 0; background: #1e1e1e; }
+        #consolePrompt { color: #888; margin-right: 8px; font-size: 14px; }
+        #consoleInput { flex: 1; background: transparent; border: none; outline: none; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 13px; }
+        #consoleInput::placeholder { color: #555; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <base target="_blank">
@@ -445,12 +189,11 @@
             scene: null,
             camera: null,
             renderer: null,
-            solidMeshes: {},      // type -> InstancedMesh
+            solidMeshes: {},
             waterMesh: null,
-            instanceMap: [],      // [x][y] -> { type, index } or null
+            instanceMap: [],
             dummy: new THREE.Object3D(),
             _matrixHide: new THREE.Matrix4().makeScale(0,0,0),
-            _matrixTemp: new THREE.Matrix4(),
 
             init() {
                 const canvas = DOM.canvas;
@@ -460,20 +203,15 @@
                 canvas.height = h;
 
                 this.scene = new THREE.Scene();
-                // 左下坐标系：相机视口 [cam.x, cam.x+w] x [cam.y, cam.y+h]
+                // 左下坐标系：camera.bottom=0, camera.top=h
                 this.camera = new THREE.OrthographicCamera(0, w, 0, h, 1, 1000);
                 this.camera.position.z = 10;
 
-                this.renderer = new THREE.WebGLRenderer({
-                    canvas: canvas,
-                    alpha: true,
-                    antialias: false
-                });
+                this.renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: false });
                 this.renderer.setSize(w, h);
                 this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 this.renderer.setClearColor(0x000000, 0);
 
-                // 为每种固体类型创建 InstancedMesh
                 const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
                 const maxCount = CONFIG.WORLD_WIDTH * CONFIG.WORLD_HEIGHT;
                 const geo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
@@ -487,58 +225,39 @@
                     this.solidMeshes[type] = mesh;
                 });
 
-                // 水 InstancedMesh（透明）
-                const waterMat = new THREE.MeshBasicMaterial({
-                    color: 0x4169E1,
-                    transparent: true,
-                    opacity: 0.6
-                });
+                const waterMat = new THREE.MeshBasicMaterial({ color: 0x4169E1, transparent: true, opacity: 0.6 });
                 this.waterMesh = new THREE.InstancedMesh(geo, waterMat, maxCount);
                 this.waterMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
                 this.scene.add(this.waterMesh);
 
-                // 初始化 instanceMap
                 for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
                     this.instanceMap[x] = [];
                     for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
                         this.instanceMap[x][y] = null;
                     }
                 }
-
-                console.log('[three] Three.js 初始化完成，InstancedMesh 就绪');
+                console.log('[three] Three.js 初始化完成');
             },
 
-            // 根据世界数据构建所有 InstancedMesh
             buildWorld() {
                 const ts = CONFIG.TILE_SIZE;
                 const W = CONFIG.WORLD_WIDTH;
                 const H = CONFIG.WORLD_HEIGHT;
-
-                // 重置计数
                 const counts = { dirt: 0, stone: 0, grass: 0, sand: 0, wood: 0, water: 0 };
 
-                // 先全部隐藏（缩放到0）
                 const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
                 solidTypes.forEach(type => {
                     const mesh = this.solidMeshes[type];
-                    for (let i = 0; i < mesh.count; i++) {
-                        mesh.setMatrixAt(i, this._matrixHide);
-                    }
+                    for (let i = 0; i < mesh.count; i++) mesh.setMatrixAt(i, this._matrixHide);
                     mesh.instanceMatrix.needsUpdate = true;
                 });
-                for (let i = 0; i < this.waterMesh.count; i++) {
-                    this.waterMesh.setMatrixAt(i, this._matrixHide);
-                }
+                for (let i = 0; i < this.waterMesh.count; i++) this.waterMesh.setMatrixAt(i, this._matrixHide);
                 this.waterMesh.instanceMatrix.needsUpdate = true;
 
-                // 遍历世界设置实例
                 for (let x = 0; x < W; x++) {
                     for (let y = 0; y < H; y++) {
                         const block = State.world[x][y];
-                        if (block === 'air' || !block) {
-                            this.instanceMap[x][y] = null;
-                            continue;
-                        }
+                        if (block === 'air' || !block) { this.instanceMap[x][y] = null; continue; }
 
                         const px = x * ts + ts / 2;
                         const py = y * ts + ts / 2;
@@ -559,42 +278,30 @@
                     }
                 }
 
-                // 更新各 mesh 的实际渲染数量
                 solidTypes.forEach(type => {
                     this.solidMeshes[type].count = counts[type];
                     this.solidMeshes[type].instanceMatrix.needsUpdate = true;
                 });
                 this.waterMesh.count = counts.water;
                 this.waterMesh.instanceMatrix.needsUpdate = true;
-
                 console.log('[three] 世界构建完成，统计:', JSON.stringify(counts));
             },
 
-            // 更新单个方块（挖掘或放置）
             updateBlock(x, y, oldType, newType) {
                 const ts = CONFIG.TILE_SIZE;
-
-                // 隐藏旧方块
                 if (oldType && oldType !== 'air') {
                     const info = this.instanceMap[x][y];
                     if (info) {
                         const mesh = info.type === 'water' ? this.waterMesh : this.solidMeshes[info.type];
-                        if (mesh) {
-                            mesh.setMatrixAt(info.index, this._matrixHide);
-                            mesh.instanceMatrix.needsUpdate = true;
-                        }
+                        if (mesh) { mesh.setMatrixAt(info.index, this._matrixHide); mesh.instanceMatrix.needsUpdate = true; }
                     }
                 }
-
-                // 放置新方块
                 if (newType && newType !== 'air') {
                     const px = x * ts + ts / 2;
                     const py = y * ts + ts / 2;
                     this.dummy.position.set(px, py, 0);
                     this.dummy.updateMatrix();
-
                     if (newType === 'water') {
-                        // 水：追加到末尾（简单策略）
                         const idx = this.waterMesh.count;
                         this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
                         this.waterMesh.count = idx + 1;
@@ -641,49 +348,45 @@
 
         // ============================================================
         //  MODULE: World
+        //  左下坐标系：y=0 是地底，y=H-1 是天空
+        //  生成逻辑直接按此语义写，零翻转
         // ============================================================
         const World = {
             init() {
                 const W = CONFIG.WORLD_WIDTH;
                 const H = CONFIG.WORLD_HEIGHT;
-                const tempWorld = [];
 
-                // 阶段1：用原 v65 的"从上往下"逻辑生成到临时数组
-                for (let x = 0; x < W; x++) {
-                    tempWorld[x] = [];
-                    const surface = 15 + Math.sin(x * 0.1) * 3 + Math.sin(x * 0.03) * 5;
-                    for (let y = 0; y < H; y++) {
-                        let block = 'stone';
-                        if (y < surface - 1) {
-                            block = 'air';
-                        } else if (y < surface) {
-                            block = 'grass';
-                        } else if (y < surface + 5) {
-                            block = 'dirt';
-                        }
-                        // 洞穴
-                        if (y > surface + 3 && Math.random() < 0.08) {
-                            block = 'air';
-                        }
-                        // 沙层
-                        if (y > surface + 15 && y < surface + 25 && Math.random() < 0.3) {
-                            block = 'sand';
-                        }
-                        // 水
-                        if (y > surface + 8 && block === 'air' && Math.random() < 0.05) {
-                            block = 'water';
-                        }
-                        tempWorld[x][y] = block;
-                    }
-                }
+                // 原 v65 地表高度从顶部约 15 格
+                // 左下坐标系：地表在底部往上约 (H-1 - 15) = 84 处
+                const surfaceY = H - 1 - 15;
 
-                // 阶段2：翻转 Y 轴存入 State.world（左下坐标系）
                 for (let x = 0; x < W; x++) {
                     State.world[x] = [];
+                    const surface = surfaceY + Math.sin(x * 0.1) * 3 + Math.sin(x * 0.03) * 5;
                     for (let y = 0; y < H; y++) {
-                        const fromTopY = y;
-                        const toBottomY = (H - 1) - fromTopY;
-                        State.world[x][toBottomY] = tempWorld[x][fromTopY];
+                        let block = 'stone';
+                        if (y < surface - 5) {
+                            block = 'stone';
+                        } else if (y < surface - 1) {
+                            block = 'dirt';
+                        } else if (y < surface) {
+                            block = 'grass';
+                        } else {
+                            block = 'air';
+                        }
+                        // 洞穴（在地表以下较深位置）
+                        if (y < surface - 3 && Math.random() < 0.08) {
+                            block = 'air';
+                        }
+                        // 沙层（在地表以下更深处）
+                        if (y < surface - 15 && y > surface - 25 && Math.random() < 0.3) {
+                            block = 'sand';
+                        }
+                        // 水（地表以下的空洞中）
+                        if (y < surface - 8 && block === 'air' && Math.random() < 0.05) {
+                            block = 'water';
+                        }
+                        State.world[x][y] = block;
                     }
                 }
 
@@ -693,9 +396,9 @@
                 State.player.vx = 0;
                 State.player.vy = 0;
 
-                // 测试水体结构（翻转后放置）
+                // 测试水体结构：矩阵第0行=顶部（所见即所得），放置时内部翻转
                 const pondMatrix = [
-                    '气气气气气气气气',
+                    '气气气气气气气气',  // ← 顶部（天空）
                     '石水水水水水水石',
                     '石水水水水水水石',
                     '石水水水水水水石',
@@ -709,31 +412,34 @@
                     '石水水水水水水石',
                     '石水水水水水水石',
                     '石水水水水水水石',
-                    '石石石石石石石石'
+                    '石石石石石石石石'   // ← 底部（地底）
                 ];
-                // 矩阵第0行是顶部，翻转后第0行对应世界底部
-                const flippedMatrix = pondMatrix.slice().reverse();
-                this.placeStructure(flippedMatrix, 5, 70); // y=70 靠近地表（原 surface≈15，翻转后地表≈84）
+                // 放置到地表附近：surfaceY 约 84，结构高 15，放在 y=70 处
+                this.placeStructure(pondMatrix, 5, 70);
 
                 console.log('[world] 世界初始化完成，尺寸:', W, 'x', H);
                 console.log('[world] 玩家初始位置:', CONFIG.RESPAWN.x, CONFIG.RESPAWN.y);
+                console.log('[world] 地表高度约:', surfaceY);
             },
 
+            // 矩阵第0行=顶部（所见即所得），内部翻转成左下坐标系
             placeStructure(matrix, startX, startY) {
                 const charMap = {
                     '气': 'air', '水': 'water', '土': 'dirt', '石': 'stone',
                     '草': 'grass', '木': 'wood', '沙': 'sand', '台': 'platform'
                 };
-                for (let row = 0; row < matrix.length; row++) {
+                const rows = matrix.length;
+                for (let row = 0; row < rows; row++) {
                     const line = matrix[row];
+                    // 翻转：矩阵第0行（顶部）→ 世界更大的y（上方）
+                    const worldY = startY + (rows - 1 - row);
                     for (let col = 0; col < line.length; col++) {
                         const ch = line[col];
                         const type = charMap[ch];
                         if (type && type !== 'air') {
                             const wx = startX + col;
-                            const wy = startY + row;
-                            if (wx >= 0 && wx < CONFIG.WORLD_WIDTH && wy >= 0 && wy < CONFIG.WORLD_HEIGHT) {
-                                this.setBlock(wx, wy, type);
+                            if (wx >= 0 && wx < CONFIG.WORLD_WIDTH && worldY >= 0 && worldY < CONFIG.WORLD_HEIGHT) {
+                                this.setBlock(wx, worldY, type);
                             }
                         }
                     }
@@ -771,13 +477,10 @@
                 const ch = window.innerHeight;
                 c.x = p.x + p.w / 2 - cw / 2;
                 c.y = p.y + p.h / 2 - ch / 2;
-                // 边界限制（可选，暂不限制天空/虚空）
             },
 
+            // 唯一翻转点：屏幕坐标系(Y向下) → 世界坐标系(Y向上)
             screenToWorld(sx, sy) {
-                // 左下坐标系：屏幕 Y=0 是顶部，对应世界 Y = camera.y + (height - sy)
-                // 但 Three.js 相机已设置 bottom=camera.y, top=camera.y+height
-                // 所以世界坐标直接是 camera.x + sx, camera.y + (height - sy)
                 const ch = window.innerHeight;
                 return {
                     x: Math.floor((State.camera.x + sx) / CONFIG.TILE_SIZE),
@@ -873,23 +576,20 @@
             },
 
             doRepeatAction() {
-                const ts = CONFIG.TILE_SIZE;
-                const ch = window.innerHeight;
-                // 左下坐标系转换
-                const wx = Math.floor((InputState.touchCurrentX + State.camera.x) / ts);
-                const wy = Math.floor((State.camera.y + (ch - InputState.touchCurrentY)) / ts);
-                State.mouseWorldX = wx;
-                State.mouseWorldY = wy;
-                if (wx < 0 || wx >= CONFIG.WORLD_WIDTH || wy < 0 || wy >= CONFIG.WORLD_HEIGHT) return;
+                const coords = Camera.screenToWorld(InputState.touchCurrentX, InputState.touchCurrentY);
+                State.mouseWorldX = coords.x;
+                State.mouseWorldY = coords.y;
+                if (coords.x < 0 || coords.x >= CONFIG.WORLD_WIDTH || coords.y < 0 || coords.y >= CONFIG.WORLD_HEIGHT) return;
                 if (State.isDigging) {
-                    World.setBlock(wx, wy, 'air');
+                    World.setBlock(coords.x, coords.y, 'air');
                 } else {
                     const p = State.player;
-                    const bx = wx * ts;
-                    const by = wy * ts;
+                    const ts = CONFIG.TILE_SIZE;
+                    const bx = coords.x * ts;
+                    const by = coords.y * ts;
                     const overlap = !(bx + ts <= p.x || bx >= p.x + p.w || by + ts <= p.y || by >= p.y + p.h);
                     if (!overlap) {
-                        World.setBlock(wx, wy, State.selectedBlock);
+                        World.setBlock(coords.x, coords.y, State.selectedBlock);
                     }
                 }
             },
@@ -917,10 +617,9 @@
                 const coords = this.getCanvasCoords(e);
                 InputState.touchCurrentX = coords.x;
                 InputState.touchCurrentY = coords.y;
-                const ts = CONFIG.TILE_SIZE;
-                const ch = window.innerHeight;
-                State.mouseWorldX = Math.floor((coords.x + State.camera.x) / ts);
-                State.mouseWorldY = Math.floor((State.camera.y + (ch - coords.y)) / ts);
+                const sw = Camera.screenToWorld(coords.x, coords.y);
+                State.mouseWorldX = sw.x;
+                State.mouseWorldY = sw.y;
             },
 
             onCanvasEnd(e) {
@@ -935,9 +634,9 @@
                 const rect = DOM.canvas.getBoundingClientRect();
                 State.mouseScreenX = e.clientX - rect.left;
                 State.mouseScreenY = e.clientY - rect.top;
-                const ch = window.innerHeight;
-                State.mouseWorldX = Math.floor((State.mouseScreenX + State.camera.x) / CONFIG.TILE_SIZE);
-                State.mouseWorldY = Math.floor((State.camera.y + (ch - State.mouseScreenY)) / CONFIG.TILE_SIZE);
+                const sw = Camera.screenToWorld(State.mouseScreenX, State.mouseScreenY);
+                State.mouseWorldX = sw.x;
+                State.mouseWorldY = sw.y;
             },
 
             onKeyDown(e) {
@@ -964,11 +663,7 @@
         // ============================================================
         const Fullscreen = {
             getElement() {
-                return document.fullscreenElement
-                    || document.webkitFullscreenElement
-                    || document.mozFullScreenElement
-                    || document.msFullscreenElement
-                    || null;
+                return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || null;
             },
             isSupported() {
                 const el = document.documentElement;
@@ -977,42 +672,32 @@
             async enter() {
                 const el = document.documentElement;
                 try {
-                    if (el.requestFullscreen)       await el.requestFullscreen();
+                    if (el.requestFullscreen) await el.requestFullscreen();
                     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-                    else if (el.mozRequestFullScreen)    el.mozRequestFullScreen();
-                    else if (el.msRequestFullscreen)     el.msRequestFullscreen();
+                    else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
+                    else if (el.msRequestFullscreen) el.msRequestFullscreen();
                 } catch (err) { console.warn('[fullscreen] 进入全屏失败:', err); throw err; }
             },
             async exit() {
                 try {
-                    if (document.exitFullscreen)       await document.exitFullscreen();
+                    if (document.exitFullscreen) await document.exitFullscreen();
                     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-                    else if (document.mozCancelFullScreen)    document.mozCancelFullScreen();
-                    else if (document.msExitFullscreen)       document.msExitFullscreen();
+                    else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+                    else if (document.msExitFullscreen) document.msExitFullscreen();
                 } catch (err) { console.warn('[fullscreen] 退出全屏失败:', err); throw err; }
             },
             async lockLandscape() {
-                if (screen.orientation && screen.orientation.lock) {
-                    try { await screen.orientation.lock('landscape'); } catch (e) {}
-                }
+                if (screen.orientation && screen.orientation.lock) { try { await screen.orientation.lock('landscape'); } catch (e) {} }
             },
             async unlockOrientation() {
-                if (screen.orientation && screen.orientation.unlock) {
-                    try { screen.orientation.unlock(); } catch (e) {}
-                }
+                if (screen.orientation && screen.orientation.unlock) { try { screen.orientation.unlock(); } catch (e) {} }
             },
             updateBtn() {
                 const btn = DOM.fullscreenBtn;
                 if (this.getElement()) {
-                    btn.innerHTML = '⛶';
-                    btn.style.borderColor = '#88ff88';
-                    btn.style.background = 'rgba(30, 60, 30, 0.85)';
-                    btn.title = '退出全屏';
+                    btn.innerHTML = '⛶'; btn.style.borderColor = '#88ff88'; btn.style.background = 'rgba(30, 60, 30, 0.85)'; btn.title = '退出全屏';
                 } else {
-                    btn.innerHTML = '⛶';
-                    btn.style.borderColor = '#4a4a6a';
-                    btn.style.background = 'rgba(30, 30, 50, 0.85)';
-                    btn.title = '全屏切换';
+                    btn.innerHTML = '⛶'; btn.style.borderColor = '#4a4a6a'; btn.style.background = 'rgba(30, 30, 50, 0.85)'; btn.title = '全屏切换';
                 }
             },
             showFeedback(success) {
@@ -1231,12 +916,9 @@
                 if (dt > 0.1) dt = 0.1;
                 if (dt <= 0) dt = 0.001;
                 State.frameCount++;
-
-                // 相机跟随（玩家尚未有物理，但先定位相机）
                 Camera.update();
                 ThreeJSRenderer.updateCamera();
                 ThreeJSRenderer.render();
-
                 DOM.coordsEl.textContent = 'X:' + Math.floor(State.player.x / CONFIG.TILE_SIZE)
                                          + ' Y:' + Math.floor(State.player.y / CONFIG.TILE_SIZE);
                 requestAnimationFrame((t) => this.tick(t));
@@ -1253,7 +935,7 @@
         // ============================================================
         const App = {
             init() {
-                console.log('[app] ====== My Terraria v1 启动 (Three.js 2D 世界) ======');
+                console.log('[app] ====== My Terraria v2 启动 (直观左下坐标系) ======');
                 initDOM();
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
@@ -1286,7 +968,6 @@
                     selector.appendChild(btn);
                 });
 
-                // 初始化顺序：Three.js -> World -> buildWorld
                 ThreeJSRenderer.init();
                 World.init();
                 ThreeJSRenderer.buildWorld();
