@@ -745,12 +745,15 @@
                 if (cw <= 0 || ch <= 0) return;
                 const cx = State.camera.x || 0;
                 const cy = State.camera.y || 0;
+                const zoom = State.camera.zoom || 1;
+                const viewW = cw * zoom;
+                const viewH = ch * zoom;
                 for (let i = 0; i < this.starBase.length; i++) {
                     const b = this.starBase[i];
-                    const sx = ((b.x + cx * 0.1) % cw + cw) % cw;
-                    const screenY = b.y % (ch * 0.6);
+                    const sx = ((b.x + cx * 0.1) % viewW + viewW) % viewW;
+                    const screenY = b.y % (viewH * 0.6);
                     positions[i * 3]     = cx + sx;
-                    positions[i * 3 + 1] = cy + ch - screenY;
+                    positions[i * 3 + 1] = cy + viewH - screenY;
                     positions[i * 3 + 2] = -2;
                 }
                 this.stars.geometry.attributes.position.needsUpdate = true;
