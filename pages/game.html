@@ -614,14 +614,14 @@
                             <input type="range" id="terrainHeightRange" min="50" max="512" value="256" style="flex:1;min-width:0;">
                         </div>
                         <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-                            <label style="color:#888;font-size:11px;white-space:nowrap;">泥土: <span id="dirtMinVal">4</span>~<span id="dirtMaxVal">12</span></label>
-                            <input type="range" id="dirtMinRange" min="2" max="30" value="4" style="flex:1;min-width:0;">
-                            <input type="range" id="dirtMaxRange" min="4" max="60" value="12" style="flex:1;min-width:0;">
-                        </div>
-                        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
                             <label style="color:#888;font-size:11px;white-space:nowrap;">表层: <span id="grassMinVal">1</span>~<span id="grassMaxVal">3</span></label>
                             <input type="range" id="grassMinRange" min="1" max="5" value="1" style="flex:1;min-width:0;">
                             <input type="range" id="grassMaxRange" min="1" max="10" value="3" style="flex:1;min-width:0;">
+                        </div>
+                        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">泥土: <span id="dirtMinVal">4</span>~<span id="dirtMaxVal">12</span></label>
+                            <input type="range" id="dirtMinRange" min="2" max="30" value="4" style="flex:1;min-width:0;">
+                            <input type="range" id="dirtMaxRange" min="4" max="60" value="12" style="flex:1;min-width:0;">
                         </div>
                     </div>
                 </div>
@@ -1419,7 +1419,7 @@
                             block = 'air';
                         } else if (depth < grassDepth) {
                             block = isDesert ? 'sand' : (isSnow ? 'ice' : 'grass');
-                        } else if (depth < dirtDepth) {
+                        } else if (depth < grassDepth + dirtDepth) {
                             block = isDesert ? 'sand' : 'dirt';
                         } else {
                             block = 'stone';
