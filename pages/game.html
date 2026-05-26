@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>My Terraria v0 - Three.js 2D 基础框架</title>
+    <title>My Terraria v1 - Three.js 2D 世界生成</title>
     <style>
         /* ====== 全局重置 ====== */
         * {
@@ -306,24 +306,16 @@
             color: #555;
         }
     </style>
-    <!-- Three.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <base target="_blank">
 </head>
 <body>
-    <!-- 全屏切换按钮 -->
     <div id="fullscreenBtn" title="全屏切换">⛶</div>
-
-    <!-- 信息面板 -->
     <div id="info">
         <div>⛏ 挖掘 / 🖱 放置</div>
         <div id="coords">X:0 Y:0</div>
     </div>
-
-    <!-- 方块选择器（动态生成） -->
     <div id="blockSelector"></div>
-
-    <!-- 方向键 -->
     <div id="controls">
         <div class="dpad">
             <div class="dpad-btn dpad-up"    data-key="up">▲</div>
@@ -332,16 +324,9 @@
             <div class="dpad-btn dpad-right" data-key="right">▶</div>
         </div>
     </div>
-
-    <!-- 跳跃按钮 -->
     <div id="jumpBtn">⬆️</div>
-    <!-- 动作按钮 -->
     <div id="actionBtn">⛏</div>
-
-    <!-- 游戏画布（Three.js 渲染器挂载点） -->
     <canvas id="gameCanvas"></canvas>
-
-    <!-- 内置控制台 -->
     <div id="consolePanel" class="collapsed">
         <div id="consoleHeader">
             <span id="consoleTitle">控制台</span>
@@ -360,11 +345,6 @@
     </div>
 
     <script>
-    // ============================================================
-    //  My Terraria v0 - Three.js 2D 基础框架
-    //  当前阶段：UI + 控制台 + Three.js 占位初始化
-    // ============================================================
-
     (function() {
         "use strict";
 
@@ -382,7 +362,7 @@
             LONG_PRESS_DELAY: 300,
             REPEAT_INTERVAL: 80,
             LONG_PRESS_MOVE_THRESHOLD: 20,
-            RESPAWN: { x: 2, y: 86 },  // 左下坐标系：y=86 对应原 v65 的 y=13（从顶部）
+            RESPAWN: { x: 2, y: 86 },
             WATER: {
                 MOVE_SCALE: 0.4,
                 DRAG: 0.95,
@@ -428,9 +408,6 @@
             frameCount: 0
         };
 
-        // ============================================================
-        //  MODULE: InputState
-        // ============================================================
         const InputState = {
             isLongPress: false,
             isTouchDown: false,
@@ -462,23 +439,30 @@
         }
 
         // ============================================================
-        //  MODULE: ThreeJSRenderer (Three.js 占位初始化)
+        //  MODULE: ThreeJSRenderer
         // ============================================================
         const ThreeJSRenderer = {
             scene: null,
             camera: null,
             renderer: null,
+            solidMeshes: {},      // type -> InstancedMesh
+            waterMesh: null,
+            instanceMap: [],      // [x][y] -> { type, index } or null
+            dummy: new THREE.Object3D(),
+            _matrixHide: new THREE.Matrix4().makeScale(0,0,0),
+            _matrixTemp: new THREE.Matrix4(),
 
             init() {
                 const canvas = DOM.canvas;
-                const w = canvas.width  = window.innerWidth;
-                const h = canvas.height = window.innerHeight;
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                canvas.width  = w;
+                canvas.height = h;
 
                 this.scene = new THREE.Scene();
-                // 左下坐标系 OrthographicCamera：left, right, bottom, top
+                // 左下坐标系：相机视口 [cam.x, cam.x+w] x [cam.y, cam.y+h]
                 this.camera = new THREE.OrthographicCamera(0, w, 0, h, 1, 1000);
                 this.camera.position.z = 10;
-                // 相机 lookAt 保持默认 (0,0,0)，但后续会跟随玩家
 
                 this.renderer = new THREE.WebGLRenderer({
                     canvas: canvas,
@@ -487,16 +471,156 @@
                 });
                 this.renderer.setSize(w, h);
                 this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                this.renderer.setClearColor(0x000000, 0); // 透明，让 CSS 背景显示
+                this.renderer.setClearColor(0x000000, 0);
 
-                // 占位：一个绿色方块表示 Three.js 已就绪
-                const geo = new THREE.BoxGeometry(64, 64, 1);
-                const mat = new THREE.MeshBasicMaterial({ color: 0x4a8c3f });
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set(w/2, h/2, 0);
-                this.scene.add(mesh);
+                // 为每种固体类型创建 InstancedMesh
+                const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
+                const maxCount = CONFIG.WORLD_WIDTH * CONFIG.WORLD_HEIGHT;
+                const geo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, 1);
 
-                console.log('[three] Three.js 初始化完成，画布:', w, 'x', h);
+                solidTypes.forEach(type => {
+                    const data = BlockRegistry.get(type);
+                    const mat = new THREE.MeshBasicMaterial({ color: data.color });
+                    const mesh = new THREE.InstancedMesh(geo, mat, maxCount);
+                    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                    this.scene.add(mesh);
+                    this.solidMeshes[type] = mesh;
+                });
+
+                // 水 InstancedMesh（透明）
+                const waterMat = new THREE.MeshBasicMaterial({
+                    color: 0x4169E1,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                this.waterMesh = new THREE.InstancedMesh(geo, waterMat, maxCount);
+                this.waterMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                this.scene.add(this.waterMesh);
+
+                // 初始化 instanceMap
+                for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
+                    this.instanceMap[x] = [];
+                    for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
+                        this.instanceMap[x][y] = null;
+                    }
+                }
+
+                console.log('[three] Three.js 初始化完成，InstancedMesh 就绪');
+            },
+
+            // 根据世界数据构建所有 InstancedMesh
+            buildWorld() {
+                const ts = CONFIG.TILE_SIZE;
+                const W = CONFIG.WORLD_WIDTH;
+                const H = CONFIG.WORLD_HEIGHT;
+
+                // 重置计数
+                const counts = { dirt: 0, stone: 0, grass: 0, sand: 0, wood: 0, water: 0 };
+
+                // 先全部隐藏（缩放到0）
+                const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
+                solidTypes.forEach(type => {
+                    const mesh = this.solidMeshes[type];
+                    for (let i = 0; i < mesh.count; i++) {
+                        mesh.setMatrixAt(i, this._matrixHide);
+                    }
+                    mesh.instanceMatrix.needsUpdate = true;
+                });
+                for (let i = 0; i < this.waterMesh.count; i++) {
+                    this.waterMesh.setMatrixAt(i, this._matrixHide);
+                }
+                this.waterMesh.instanceMatrix.needsUpdate = true;
+
+                // 遍历世界设置实例
+                for (let x = 0; x < W; x++) {
+                    for (let y = 0; y < H; y++) {
+                        const block = State.world[x][y];
+                        if (block === 'air' || !block) {
+                            this.instanceMap[x][y] = null;
+                            continue;
+                        }
+
+                        const px = x * ts + ts / 2;
+                        const py = y * ts + ts / 2;
+                        this.dummy.position.set(px, py, 0);
+                        this.dummy.updateMatrix();
+
+                        if (block === 'water') {
+                            const idx = counts.water++;
+                            this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
+                            this.instanceMap[x][y] = { type: 'water', index: idx };
+                        } else if (this.solidMeshes[block]) {
+                            const idx = counts[block]++;
+                            this.solidMeshes[block].setMatrixAt(idx, this.dummy.matrix);
+                            this.instanceMap[x][y] = { type: block, index: idx };
+                        } else {
+                            this.instanceMap[x][y] = null;
+                        }
+                    }
+                }
+
+                // 更新各 mesh 的实际渲染数量
+                solidTypes.forEach(type => {
+                    this.solidMeshes[type].count = counts[type];
+                    this.solidMeshes[type].instanceMatrix.needsUpdate = true;
+                });
+                this.waterMesh.count = counts.water;
+                this.waterMesh.instanceMatrix.needsUpdate = true;
+
+                console.log('[three] 世界构建完成，统计:', JSON.stringify(counts));
+            },
+
+            // 更新单个方块（挖掘或放置）
+            updateBlock(x, y, oldType, newType) {
+                const ts = CONFIG.TILE_SIZE;
+
+                // 隐藏旧方块
+                if (oldType && oldType !== 'air') {
+                    const info = this.instanceMap[x][y];
+                    if (info) {
+                        const mesh = info.type === 'water' ? this.waterMesh : this.solidMeshes[info.type];
+                        if (mesh) {
+                            mesh.setMatrixAt(info.index, this._matrixHide);
+                            mesh.instanceMatrix.needsUpdate = true;
+                        }
+                    }
+                }
+
+                // 放置新方块
+                if (newType && newType !== 'air') {
+                    const px = x * ts + ts / 2;
+                    const py = y * ts + ts / 2;
+                    this.dummy.position.set(px, py, 0);
+                    this.dummy.updateMatrix();
+
+                    if (newType === 'water') {
+                        // 水：追加到末尾（简单策略）
+                        const idx = this.waterMesh.count;
+                        this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
+                        this.waterMesh.count = idx + 1;
+                        this.waterMesh.instanceMatrix.needsUpdate = true;
+                        this.instanceMap[x][y] = { type: 'water', index: idx };
+                    } else if (this.solidMeshes[newType]) {
+                        const idx = this.solidMeshes[newType].count;
+                        this.solidMeshes[newType].setMatrixAt(idx, this.dummy.matrix);
+                        this.solidMeshes[newType].count = idx + 1;
+                        this.solidMeshes[newType].instanceMatrix.needsUpdate = true;
+                        this.instanceMap[x][y] = { type: newType, index: idx };
+                    }
+                } else {
+                    this.instanceMap[x][y] = null;
+                }
+            },
+
+            updateCamera() {
+                const c = State.camera;
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                this.camera.left   = c.x;
+                this.camera.right  = c.x + w;
+                this.camera.bottom = c.y;
+                this.camera.top    = c.y + h;
+                this.camera.updateProjectionMatrix();
             },
 
             render() {
@@ -511,12 +635,154 @@
                 DOM.canvas.width  = w;
                 DOM.canvas.height = h;
                 this.renderer.setSize(w, h);
-                this.camera.right  = w;
-                this.camera.top     = h; // 注意：OrthographicCamera top 是正值，但我们的坐标系是 bottom=0, top=h
-                // 实际上 Three.js 的 OrthographicCamera 默认是 top 在上（Y 向上为正），
-                // 但我们可以保持相机参数不变，通过场景内物体坐标映射来处理左下坐标系
-                this.camera.updateProjectionMatrix();
-                console.log('[three] 渲染器尺寸调整:', w, 'x', h);
+                this.updateCamera();
+            }
+        };
+
+        // ============================================================
+        //  MODULE: World
+        // ============================================================
+        const World = {
+            init() {
+                const W = CONFIG.WORLD_WIDTH;
+                const H = CONFIG.WORLD_HEIGHT;
+                const tempWorld = [];
+
+                // 阶段1：用原 v65 的"从上往下"逻辑生成到临时数组
+                for (let x = 0; x < W; x++) {
+                    tempWorld[x] = [];
+                    const surface = 15 + Math.sin(x * 0.1) * 3 + Math.sin(x * 0.03) * 5;
+                    for (let y = 0; y < H; y++) {
+                        let block = 'stone';
+                        if (y < surface - 1) {
+                            block = 'air';
+                        } else if (y < surface) {
+                            block = 'grass';
+                        } else if (y < surface + 5) {
+                            block = 'dirt';
+                        }
+                        // 洞穴
+                        if (y > surface + 3 && Math.random() < 0.08) {
+                            block = 'air';
+                        }
+                        // 沙层
+                        if (y > surface + 15 && y < surface + 25 && Math.random() < 0.3) {
+                            block = 'sand';
+                        }
+                        // 水
+                        if (y > surface + 8 && block === 'air' && Math.random() < 0.05) {
+                            block = 'water';
+                        }
+                        tempWorld[x][y] = block;
+                    }
+                }
+
+                // 阶段2：翻转 Y 轴存入 State.world（左下坐标系）
+                for (let x = 0; x < W; x++) {
+                    State.world[x] = [];
+                    for (let y = 0; y < H; y++) {
+                        const fromTopY = y;
+                        const toBottomY = (H - 1) - fromTopY;
+                        State.world[x][toBottomY] = tempWorld[x][fromTopY];
+                    }
+                }
+
+                // 玩家重生点（左下坐标系）
+                State.player.x = CONFIG.RESPAWN.x * CONFIG.TILE_SIZE;
+                State.player.y = CONFIG.RESPAWN.y * CONFIG.TILE_SIZE;
+                State.player.vx = 0;
+                State.player.vy = 0;
+
+                // 测试水体结构（翻转后放置）
+                const pondMatrix = [
+                    '气气气气气气气气',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石水水水水水水石',
+                    '石石石石石石石石'
+                ];
+                // 矩阵第0行是顶部，翻转后第0行对应世界底部
+                const flippedMatrix = pondMatrix.slice().reverse();
+                this.placeStructure(flippedMatrix, 5, 70); // y=70 靠近地表（原 surface≈15，翻转后地表≈84）
+
+                console.log('[world] 世界初始化完成，尺寸:', W, 'x', H);
+                console.log('[world] 玩家初始位置:', CONFIG.RESPAWN.x, CONFIG.RESPAWN.y);
+            },
+
+            placeStructure(matrix, startX, startY) {
+                const charMap = {
+                    '气': 'air', '水': 'water', '土': 'dirt', '石': 'stone',
+                    '草': 'grass', '木': 'wood', '沙': 'sand', '台': 'platform'
+                };
+                for (let row = 0; row < matrix.length; row++) {
+                    const line = matrix[row];
+                    for (let col = 0; col < line.length; col++) {
+                        const ch = line[col];
+                        const type = charMap[ch];
+                        if (type && type !== 'air') {
+                            const wx = startX + col;
+                            const wy = startY + row;
+                            if (wx >= 0 && wx < CONFIG.WORLD_WIDTH && wy >= 0 && wy < CONFIG.WORLD_HEIGHT) {
+                                this.setBlock(wx, wy, type);
+                            }
+                        }
+                    }
+                }
+                console.log('[world] 结构生成完成:', startX, startY, matrix.length + 'x' + matrix[0].length);
+            },
+
+            getBlock(x, y) {
+                if (x < 0 || x >= CONFIG.WORLD_WIDTH || y < 0 || y >= CONFIG.WORLD_HEIGHT) return null;
+                return State.world[x][y];
+            },
+
+            setBlock(x, y, type) {
+                if (x < 0 || x >= CONFIG.WORLD_WIDTH || y < 0 || y >= CONFIG.WORLD_HEIGHT) return;
+                const oldType = State.world[x][y];
+                State.world[x][y] = type;
+                ThreeJSRenderer.updateBlock(x, y, oldType, type);
+            },
+
+            isSolid(x, y) {
+                const block = this.getBlock(x, y);
+                if (block === null) return false;
+                return BlockRegistry.isSolid(block);
+            }
+        };
+
+        // ============================================================
+        //  MODULE: Camera
+        // ============================================================
+        const Camera = {
+            update() {
+                const p = State.player;
+                const c = State.camera;
+                const cw = window.innerWidth;
+                const ch = window.innerHeight;
+                c.x = p.x + p.w / 2 - cw / 2;
+                c.y = p.y + p.h / 2 - ch / 2;
+                // 边界限制（可选，暂不限制天空/虚空）
+            },
+
+            screenToWorld(sx, sy) {
+                // 左下坐标系：屏幕 Y=0 是顶部，对应世界 Y = camera.y + (height - sy)
+                // 但 Three.js 相机已设置 bottom=camera.y, top=camera.y+height
+                // 所以世界坐标直接是 camera.x + sx, camera.y + (height - sy)
+                const ch = window.innerHeight;
+                return {
+                    x: Math.floor((State.camera.x + sx) / CONFIG.TILE_SIZE),
+                    y: Math.floor((State.camera.y + (ch - sy)) / CONFIG.TILE_SIZE)
+                };
             }
         };
 
@@ -546,7 +812,6 @@
         // ============================================================
         const Input = {
             init() {
-                // 画布 Pointer Events
                 DOM.canvas.addEventListener('pointerdown', (e) => {
                     e.preventDefault();
                     DOM.canvas.setPointerCapture(e.pointerId);
@@ -569,7 +834,6 @@
                 });
                 DOM.canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
 
-                // 方向键
                 DOM.dpadBtns.forEach(btn => {
                     const key = btn.dataset.key;
                     const down = (e) => { e.preventDefault(); State.keys[key] = true; };
@@ -580,11 +844,9 @@
                     btn.addEventListener('pointercancel',up);
                 });
 
-                // 键盘
                 window.addEventListener('keydown', this.onKeyDown.bind(this));
                 window.addEventListener('keyup',   this.onKeyUp.bind(this));
 
-                // 跳跃按钮
                 const jumpDown = (e) => { e.preventDefault(); State.keys.jump = true; };
                 const jumpUp   = (e) => { State.keys.jump = false; };
                 DOM.jumpBtn.addEventListener('pointerdown', jumpDown);
@@ -592,7 +854,6 @@
                 DOM.jumpBtn.addEventListener('pointerleave',jumpUp);
                 DOM.jumpBtn.addEventListener('pointercancel',jumpUp);
 
-                // 动作按钮
                 DOM.actionBtn.addEventListener('pointerdown', (e) => {
                     e.preventDefault();
                     State.isDigging = !State.isDigging;
@@ -612,13 +873,25 @@
             },
 
             doRepeatAction() {
-                // 占位：后续接入世界操作
                 const ts = CONFIG.TILE_SIZE;
+                const ch = window.innerHeight;
+                // 左下坐标系转换
                 const wx = Math.floor((InputState.touchCurrentX + State.camera.x) / ts);
-                const wy = Math.floor((InputState.touchCurrentY + State.camera.y) / ts);
+                const wy = Math.floor((State.camera.y + (ch - InputState.touchCurrentY)) / ts);
                 State.mouseWorldX = wx;
                 State.mouseWorldY = wy;
-                console.log('[input] 画布操作:', wx, wy, State.isDigging ? 'dig' : 'place');
+                if (wx < 0 || wx >= CONFIG.WORLD_WIDTH || wy < 0 || wy >= CONFIG.WORLD_HEIGHT) return;
+                if (State.isDigging) {
+                    World.setBlock(wx, wy, 'air');
+                } else {
+                    const p = State.player;
+                    const bx = wx * ts;
+                    const by = wy * ts;
+                    const overlap = !(bx + ts <= p.x || bx >= p.x + p.w || by + ts <= p.y || by >= p.y + p.h);
+                    if (!overlap) {
+                        World.setBlock(wx, wy, State.selectedBlock);
+                    }
+                }
             },
 
             onCanvasStart(e) {
@@ -645,8 +918,9 @@
                 InputState.touchCurrentX = coords.x;
                 InputState.touchCurrentY = coords.y;
                 const ts = CONFIG.TILE_SIZE;
+                const ch = window.innerHeight;
                 State.mouseWorldX = Math.floor((coords.x + State.camera.x) / ts);
-                State.mouseWorldY = Math.floor((coords.y + State.camera.y) / ts);
+                State.mouseWorldY = Math.floor((State.camera.y + (ch - coords.y)) / ts);
             },
 
             onCanvasEnd(e) {
@@ -661,8 +935,9 @@
                 const rect = DOM.canvas.getBoundingClientRect();
                 State.mouseScreenX = e.clientX - rect.left;
                 State.mouseScreenY = e.clientY - rect.top;
-                // 左下坐标系转换：屏幕 Y=0 是顶部，对应世界更大 Y
-                // 占位：后续接入 Camera.screenToWorld
+                const ch = window.innerHeight;
+                State.mouseWorldX = Math.floor((State.mouseScreenX + State.camera.x) / CONFIG.TILE_SIZE);
+                State.mouseWorldY = Math.floor((State.camera.y + (ch - State.mouseScreenY)) / CONFIG.TILE_SIZE);
             },
 
             onKeyDown(e) {
@@ -793,7 +1068,6 @@
                     return;
                 }
 
-                // 劫持原生 console
                 const origLog   = console.log;
                 const origWarn  = console.warn;
                 const origError = console.error;
@@ -805,7 +1079,6 @@
                 console.error = (...args) => { origError.apply(this, args); this.appendLine('error', this.stringifyArgs(args)); };
                 console.info  = (...args) => { origInfo.apply(this, args);  this.appendLine('info',  this.stringifyArgs(args)); };
 
-                // 全局错误捕获
                 window.onerror = (msg, url, line, col, err) => {
                     const text = err && err.stack ? err.stack : (msg + ' at ' + (url || '?') + ':' + line + ':' + col);
                     this.appendLine('error', text);
@@ -821,7 +1094,6 @@
                     else this.appendLine('error', 'Unhandled Promise Rejection: ' + String(reason));
                 });
 
-                // 触摸滚动
                 content.addEventListener('touchstart', (e) => {
                     this.touchActive = true;
                     this.lastTouchY = e.touches[0].clientY;
@@ -838,7 +1110,6 @@
                 }, { passive: true });
                 content.addEventListener('touchend', () => { this.touchActive = false; }, { passive: true });
 
-                // 展开/收起
                 const togglePanel = () => {
                     const isCollapsed = panel.classList.toggle('collapsed');
                     console.log('[console] 控制台' + (isCollapsed ? '收起' : '展开'));
@@ -849,7 +1120,6 @@
                 });
                 toggle.addEventListener('pointerdown', (e) => { e.stopPropagation(); togglePanel(); });
 
-                // 复制
                 const copyBtn = document.getElementById('consoleCopy');
                 if (copyBtn) {
                     copyBtn.addEventListener('pointerdown', (e) => {
@@ -865,10 +1135,8 @@
                     });
                 }
 
-                // 清空
                 clearBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); content.innerHTML = ''; console.log('[console] 已清空'); });
 
-                // 自动滚动切换
                 autoBtn.addEventListener('pointerdown', (e) => {
                     e.stopPropagation();
                     const now = Date.now();
@@ -881,7 +1149,6 @@
                     console.log('[console] 自动滚动' + (this.autoScroll ? '开启' : '关闭'));
                 });
 
-                // 输入执行
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' || e.keyCode === 13) {
                         e.preventDefault();
@@ -965,8 +1232,9 @@
                 if (dt <= 0) dt = 0.001;
                 State.frameCount++;
 
-                // 占位：后续接入 Physics + Camera + World
-                // 当前仅渲染 Three.js 占位场景
+                // 相机跟随（玩家尚未有物理，但先定位相机）
+                Camera.update();
+                ThreeJSRenderer.updateCamera();
                 ThreeJSRenderer.render();
 
                 DOM.coordsEl.textContent = 'X:' + Math.floor(State.player.x / CONFIG.TILE_SIZE)
@@ -985,12 +1253,11 @@
         // ============================================================
         const App = {
             init() {
-                console.log('[app] ====== My Terraria v0 启动 (Three.js 2D 框架) ======');
+                console.log('[app] ====== My Terraria v1 启动 (Three.js 2D 世界) ======');
                 initDOM();
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
 
-                // 注册方块
                 BlockRegistry.register('air',      { color: null,               solid: false, icon: '',   tooltip: '空气' });
                 BlockRegistry.register('dirt',     { color: '#8B6F47',           solid: true,  icon: '土',   tooltip: '泥土',     uiColor: '#8B4513' });
                 BlockRegistry.register('stone',    { color: '#7a7a85',           solid: true,  icon: '石',   tooltip: '石头',     uiColor: '#708090' });
@@ -1001,7 +1268,6 @@
                 BlockRegistry.register('platform', { color: '#C4956A',           solid: true,  icon: '台',   tooltip: '平台',     uiColor: '#C4956A' });
                 console.log('[app] 方块注册完成:', BlockRegistry.getAllPlaceable().join(', '));
 
-                // 动态生成方块选择器
                 const selector = document.getElementById('blockSelector');
                 BlockRegistry.getAllPlaceable().forEach((type) => {
                     const data = BlockRegistry.get(type);
@@ -1020,10 +1286,11 @@
                     selector.appendChild(btn);
                 });
 
-                // 初始化 Three.js 占位
+                // 初始化顺序：Three.js -> World -> buildWorld
                 ThreeJSRenderer.init();
+                World.init();
+                ThreeJSRenderer.buildWorld();
 
-                // 初始化各子系统
                 Input.init();
                 Fullscreen.init();
                 ConsoleModule.init();
@@ -1044,11 +1311,7 @@
             }
         };
 
-        // ============================================================
-        //  启动
-        // ============================================================
         App.init();
-
     })();
     </script>
 </body>
