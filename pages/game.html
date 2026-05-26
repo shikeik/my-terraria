@@ -5,77 +5,488 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>My Terraria v2 - Three.js 2D 直观坐标</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
-        html, body { width: 100%; height: 100%; overflow: hidden; background: linear-gradient(to bottom, #1a1a3e 0%, #2d2d5a 50%, #4a4a7a 100%); font-family: 'Courier New', monospace; }
-        #gameCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; z-index: 0; }
-        #fullscreenBtn { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 36px; height: 36px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-radius: 6px; color: #e0e0e0; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; backdrop-filter: blur(4px); user-select: none; pointer-events: auto; }
-        #fullscreenBtn:active { background: rgba(50, 50, 80, 0.9); border-color: #6a6a9a; transform: translateX(-50%) scale(0.95); }
-        #info { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); color: #aaa; font-size: 11px; z-index: 1000; text-shadow: 1px 1px 0 #000; pointer-events: none; }
-        #controls { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); left: calc(20px + env(safe-area-inset-left)); z-index: 1000; display: flex; gap: 12px; pointer-events: auto; }
-        .dpad { position: relative; width: 140px; height: 140px; }
-        .dpad-btn { position: absolute; width: 44px; height: 44px; background: rgba(30, 30, 50, 0.7); border: 2px solid #4a4a6a; border-radius: 8px; color: #aaa; font-size: 18px; display: flex; align-items: center; justify-content: center; user-select: none; pointer-events: auto; }
-        .dpad-btn:active { background: rgba(60, 60, 100, 0.8); border-color: #7a7aaa; }
-        .dpad-up    { top: 0; left: 48px; }
-        .dpad-down  { bottom: 0; left: 48px; }
-        .dpad-left  { top: 48px; left: 0; }
-        .dpad-right { top: 48px; right: 0; }
-        #actionBtn { position: absolute; bottom: calc(30px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 70px; height: 70px; background: rgba(180, 60, 60, 0.7); border: 3px solid #a05050; border-radius: 50%; color: #fff; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; pointer-events: auto; }
-        #actionBtn:active { background: rgba(220, 80, 80, 0.9); transform: scale(0.92); }
-        #jumpBtn { position: absolute; bottom: calc(110px + env(safe-area-inset-bottom)); right: calc(30px + env(safe-area-inset-right)); width: 60px; height: 60px; background: rgba(60, 120, 180, 0.7); border: 3px solid #5080a0; border-radius: 50%; color: #fff; font-size: 22px; display: flex; align-items: center; justify-content: center; z-index: 1000; user-select: none; pointer-events: auto; }
-        #jumpBtn:active { background: rgba(80, 160, 220, 0.9); transform: scale(0.92); }
-        /* 快捷栏：底部正中横向 */
-        #hotbarWrap { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 4px; z-index: 1000; pointer-events: auto; }
-        #blockSelector { display: flex; flex-direction: row; gap: 3px; }
-        .block-btn { width: 32px; height: 32px; border: 2px solid #4a4a6a; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; pointer-events: auto; }
-        .block-btn.selected { border-color: #ffff88; box-shadow: 0 0 6px rgba(255, 255, 136, 0.4); }
-        /* 背包按钮（MC风格） */
-        #inventoryBtn { width: 36px; height: 36px; background: rgba(60, 45, 30, 0.85); border: 2px solid #8B6914; border-radius: 4px; color: #e0e0e0; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; pointer-events: auto; }
-        #inventoryBtn:active { background: rgba(80, 65, 40, 0.9); transform: scale(0.95); }
-        /* 背包面板 */
-        #inventoryPanel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 320px; background: rgba(20, 20, 30, 0.95); border: 2px solid #4a4a6a; border-radius: 8px; z-index: 1001; display: none; flex-direction: column; padding: 12px; gap: 8px; pointer-events: auto; }
-        #inventoryPanel.open { display: flex; }
-        #inventoryTitle { color: #ccc; font-size: 14px; font-weight: bold; text-align: center; }
-        #inventoryGrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
-        .inv-slot { width: 32px; height: 32px; background: rgba(40, 40, 55, 0.8); border: 1px solid #3a3a4a; border-radius: 3px; }
-        #inventoryClose { position: absolute; top: 6px; right: 10px; color: #888; font-size: 16px; cursor: pointer; pointer-events: auto; }
-        #inventoryClose:active { color: #ff8888; }
-        /* 右侧抽屉 */
-        #sideDrawer { position: absolute; top: 50px; right: 0; width: 280px; height: calc(100% - 50px); background: rgba(20, 20, 30, 0.95); border-left: 2px solid #4a4a6a; z-index: 1000; transform: translateX(100%); transition: transform 0.25s ease; display: flex; flex-direction: column; pointer-events: auto; }
-        #sideDrawer.open { transform: translateX(0); }
-        #drawerToggle { position: absolute; top: 50%; right: 0; width: 28px; height: 48px; background: rgba(30, 30, 50, 0.85); border: 2px solid #4a4a6a; border-right: none; border-radius: 6px 0 0 6px; color: #aaa; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; user-select: none; transform: translateY(-50%); pointer-events: auto; }
-        #drawerToggle:active { background: rgba(50, 50, 80, 0.9); }
-        #drawerToggle.open { right: 280px; }
-        .tab-bar { display: flex; gap: 2px; padding: 8px; border-bottom: 1px solid #3a3a4a; }
-        .tab-btn { flex: 1; padding: 6px 0; background: rgba(40, 40, 55, 0.8); border: 1px solid #3a3a4a; border-radius: 4px; color: #888; font-size: 12px; text-align: center; cursor: pointer; pointer-events: auto; }
-        .tab-btn.active { background: rgba(60, 60, 90, 0.9); color: #ccc; border-color: #5a5a7a; }
-        .tab-content { flex: 1; padding: 10px; overflow-y: auto; color: #aaa; font-size: 12px; display: none; }
-        .tab-content.active { display: block; }
-        #uiOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; pointer-events: none; display: flex; flex-direction: column; }
-        #uiArea { flex: 1; position: relative; pointer-events: none; overflow: hidden; }
-        #consolePanel { position: relative; flex-shrink: 0; background: #1e1e1e; border-top: 1px solid #444; display: flex; flex-direction: column; font-family: 'Courier New', monospace; font-size: 13px; transition: height 0.2s ease; height: clamp(140px, 25vh, 220px); touch-action: auto; pointer-events: auto; }
-        #consolePanel.collapsed { height: 32px !important; padding-bottom: env(safe-area-inset-bottom); touch-action: none; }
-        #consolePanel.collapsed #consoleContent, #consolePanel.collapsed #consoleInputWrap { display: none; }
-        #consolePanel.collapsed #consoleToggle { transform: rotate(180deg); }
-        #consoleHeader { height: 32px; background: #2d2d2d; border-bottom: 1px solid #444; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; flex-shrink: 0; user-select: none; cursor: pointer; }
-        #consoleTitle { color: #ccc; font-weight: bold; font-size: 13px; }
-        #consoleHeaderRight { display: flex; align-items: center; gap: 14px; }
-        #consoleClear, #consoleAuto, #consoleCopy, #consoleToggle { color: #888; font-size: 12px; cursor: pointer; }
-        #consoleCopy:active { color: #75beff; }
-        #consoleAuto.auto-on { color: #88ff88; }
-        #consoleAuto.auto-off { color: #ff8888; text-decoration: line-through; }
-        #consoleToggle { transition: transform 0.2s; }
-        #consoleContent { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 10px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); color: #d4d4d4; line-height: 1.5; -webkit-overflow-scrolling: touch; touch-action: pan-y; min-height: 0; overscroll-behavior: contain; }
-        #consoleContent .log-line { margin-bottom: 2px; word-break: break-all; white-space: pre-wrap; }
-        #consoleContent .log-log   { color: #d4d4d4; }
-        #consoleContent .log-warn  { color: #ffcc00; }
-        #consoleContent .log-error { color: #ff4444; }
-        #consoleContent .log-info  { color: #75beff; }
-        #consoleContent .log-time { color: #666; font-size: 11px; margin-right: 6px; }
-        #consoleInputWrap { height: 36px; border-top: 1px solid #444; display: flex; align-items: center; padding: 0 10px; flex-shrink: 0; background: #1e1e1e; }
-        #consolePrompt { color: #888; margin-right: 8px; font-size: 14px; }
-        #consoleInput { flex: 1; background: transparent; border: none; outline: none; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 13px; }
-        #consoleInput::placeholder { color: #555; }
-    </style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: none;
+    }
+    html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: linear-gradient(to bottom, #1a1a3e 0%, #2d2d5a 50%, #4a4a7a 100%);
+        font-family: 'Courier New', monospace;
+    }
+    #gameCanvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        z-index: 0;
+    }
+    #fullscreenBtn {
+        position: absolute;
+        top: calc(8px + env(safe-area-inset-top));
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 36px;
+        background: rgba(30, 30, 50, 0.85);
+        border: 2px solid #4a4a6a;
+        border-radius: 6px;
+        color: #e0e0e0;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+        user-select: none;
+        pointer-events: auto;
+    }
+    #fullscreenBtn:active {
+        background: rgba(50, 50, 80, 0.9);
+        border-color: #6a6a9a;
+        transform: translateX(-50%) scale(0.95);
+    }
+    #info {
+        position: absolute;
+        top: calc(8px + env(safe-area-inset-top));
+        left: calc(12px + env(safe-area-inset-left));
+        color: #aaa;
+        font-size: 11px;
+        z-index: 1000;
+        text-shadow: 1px 1px 0 #000;
+        pointer-events: none;
+    }
+    #controls {
+        position: absolute;
+        bottom: calc(20px + env(safe-area-inset-bottom));
+        left: calc(20px + env(safe-area-inset-left));
+        z-index: 1000;
+        display: flex;
+        gap: 12px;
+        pointer-events: auto;
+    }
+    .dpad {
+        position: relative;
+        width: 140px;
+        height: 140px;
+    }
+    .dpad-btn {
+        position: absolute;
+        width: 44px;
+        height: 44px;
+        background: rgba(30, 30, 50, 0.7);
+        border: 2px solid #4a4a6a;
+        border-radius: 8px;
+        color: #aaa;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+        pointer-events: auto;
+    }
+    .dpad-btn:active {
+        background: rgba(60, 60, 100, 0.8);
+        border-color: #7a7aaa;
+    }
+    .dpad-up {
+        top: 0;
+        left: 48px;
+    }
+    .dpad-down {
+        bottom: 0;
+        left: 48px;
+    }
+    .dpad-left {
+        top: 48px;
+        left: 0;
+    }
+    .dpad-right {
+        top: 48px;
+        right: 0;
+    }
+    #actionBtn {
+        position: absolute;
+        bottom: calc(30px + env(safe-area-inset-bottom));
+        right: calc(30px + env(safe-area-inset-right));
+        width: 70px;
+        height: 70px;
+        background: rgba(180, 60, 60, 0.7);
+        border: 3px solid #a05050;
+        border-radius: 50%;
+        color: #fff;
+        font-size: 14px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        user-select: none;
+        pointer-events: auto;
+    }
+    #actionBtn:active {
+        background: rgba(220, 80, 80, 0.9);
+        transform: scale(0.92);
+    }
+    #jumpBtn {
+        position: absolute;
+        bottom: calc(110px + env(safe-area-inset-bottom));
+        right: calc(30px + env(safe-area-inset-right));
+        width: 60px;
+        height: 60px;
+        background: rgba(60, 120, 180, 0.7);
+        border: 3px solid #5080a0;
+        border-radius: 50%;
+        color: #fff;
+        font-size: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        user-select: none;
+        pointer-events: auto;
+    }
+    #jumpBtn:active {
+        background: rgba(80, 160, 220, 0.9);
+        transform: scale(0.92);
+    }
+    /* 快捷栏：底部正中横向 */
+        #hotbarWrap {
+        position: absolute;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        z-index: 1000;
+        pointer-events: auto;
+    }
+    #blockSelector {
+        display: flex;
+        flex-direction: row;
+        gap: 3px;
+    }
+    .block-btn {
+        width: 32px;
+        height: 32px;
+        border: 2px solid #4a4a6a;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: #fff;
+        text-shadow: 1px 1px 0 #000;
+        pointer-events: auto;
+    }
+    .block-btn.selected {
+        border-color: #ffff88;
+        box-shadow: 0 0 6px rgba(255, 255, 136, 0.4);
+    }
+    /* 背包按钮（MC风格） */
+        #inventoryBtn {
+        width: 36px;
+        height: 36px;
+        background: rgba(60, 45, 30, 0.85);
+        border: 2px solid #8B6914;
+        border-radius: 4px;
+        color: #e0e0e0;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        user-select: none;
+        pointer-events: auto;
+    }
+    #inventoryBtn:active {
+        background: rgba(80, 65, 40, 0.9);
+        transform: scale(0.95);
+    }
+    /* 背包面板 */
+        #inventoryPanel {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 320px;
+        background: rgba(20, 20, 30, 0.95);
+        border: 2px solid #4a4a6a;
+        border-radius: 8px;
+        z-index: 1001;
+        display: none;
+        flex-direction: column;
+        padding: 12px;
+        gap: 8px;
+        pointer-events: auto;
+    }
+    #inventoryPanel.open {
+        display: flex;
+    }
+    #inventoryTitle {
+        color: #ccc;
+        font-size: 14px;
+        font-weight: bold;
+        text-align: center;
+    }
+    #inventoryGrid {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 4px;
+    }
+    .inv-slot {
+        width: 32px;
+        height: 32px;
+        background: rgba(40, 40, 55, 0.8);
+        border: 1px solid #3a3a4a;
+        border-radius: 3px;
+    }
+    #inventoryClose {
+        position: absolute;
+        top: 6px;
+        right: 10px;
+        color: #888;
+        font-size: 16px;
+        cursor: pointer;
+        pointer-events: auto;
+    }
+    #inventoryClose:active {
+        color: #ff8888;
+    }
+    /* 右侧抽屉 */
+        #sideDrawer {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        width: 280px;
+        background: rgba(20, 20, 30, 0.95);
+        border-left: 2px solid #4a4a6a;
+        z-index: 1000;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        display: flex;
+        flex-direction: column;
+        pointer-events: auto;
+    }
+    #sideDrawer.open {
+        transform: translateX(0);
+    }
+    #drawerToggle {
+        position: absolute;
+        top: 8px;
+        right: 0;
+        width: 22px;
+        height: 36px;
+        background: rgba(30, 30, 50, 0.85);
+        border: 2px solid #4a4a6a;
+        border-right: none;
+        border-radius: 6px 0 0 6px;
+        color: #aaa;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1000;
+        user-select: none;
+        pointer-events: auto;
+    }
+    #drawerToggle:active {
+        background: rgba(50, 50, 80, 0.9);
+    }
+    #drawerToggle.open {
+        right: 280px;
+    }
+    .tab-bar {
+        display: flex;
+        gap: 2px;
+        padding: 8px;
+        border-bottom: 1px solid #3a3a4a;
+    }
+    .tab-btn {
+        flex: 1;
+        padding: 6px 0;
+        background: rgba(40, 40, 55, 0.8);
+        border: 1px solid #3a3a4a;
+        border-radius: 4px;
+        color: #888;
+        font-size: 12px;
+        text-align: center;
+        cursor: pointer;
+        pointer-events: auto;
+    }
+    .tab-btn.active {
+        background: rgba(60, 60, 90, 0.9);
+        color: #ccc;
+        border-color: #5a5a7a;
+    }
+    .tab-content {
+        flex: 1;
+        padding: 10px;
+        overflow-y: auto;
+        color: #aaa;
+        font-size: 12px;
+        display: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+    #uiOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+    }
+    #uiArea {
+        flex: 1;
+        position: relative;
+        pointer-events: none;
+        overflow: hidden;
+    }
+    #consolePanel {
+        position: relative;
+        flex-shrink: 0;
+        background: #1e1e1e;
+        border-top: 1px solid #444;
+        display: flex;
+        flex-direction: column;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        transition: height 0.2s ease;
+        height: clamp(140px, 25vh, 220px);
+        touch-action: auto;
+        pointer-events: auto;
+    }
+    #consolePanel.collapsed {
+        height: 32px !important;
+        padding-bottom: env(safe-area-inset-bottom);
+        touch-action: none;
+    }
+    #consolePanel.collapsed #consoleContent, #consolePanel.collapsed #consoleInputWrap {
+        display: none;
+    }
+    #consolePanel.collapsed #consoleToggle {
+        transform: rotate(180deg);
+    }
+    #consoleHeader {
+        height: 32px;
+        background: #2d2d2d;
+        border-bottom: 1px solid #444;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        flex-shrink: 0;
+        user-select: none;
+        cursor: pointer;
+    }
+    #consoleTitle {
+        color: #ccc;
+        font-weight: bold;
+        font-size: 13px;
+    }
+    #consoleHeaderRight {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    #consoleClear, #consoleAuto, #consoleCopy, #consoleToggle {
+        color: #888;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    #consoleCopy:active {
+        color: #75beff;
+    }
+    #consoleAuto.auto-on {
+        color: #88ff88;
+    }
+    #consoleAuto.auto-off {
+        color: #ff8888;
+        text-decoration: line-through;
+    }
+    #consoleToggle {
+        transition: transform 0.2s;
+    }
+    #consoleContent {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 6px 10px;
+        padding-bottom: calc(6px + env(safe-area-inset-bottom));
+        color: #d4d4d4;
+        line-height: 1.5;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+        min-height: 0;
+        overscroll-behavior: contain;
+    }
+    #consoleContent .log-line {
+        margin-bottom: 2px;
+        word-break: break-all;
+        white-space: pre-wrap;
+    }
+    #consoleContent .log-log {
+        color: #d4d4d4;
+    }
+    #consoleContent .log-warn {
+        color: #ffcc00;
+    }
+    #consoleContent .log-error {
+        color: #ff4444;
+    }
+    #consoleContent .log-info {
+        color: #75beff;
+    }
+    #consoleContent .log-time {
+        color: #666;
+        font-size: 11px;
+        margin-right: 6px;
+    }
+    #consoleInputWrap {
+        height: 36px;
+        border-top: 1px solid #444;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        flex-shrink: 0;
+        background: #1e1e1e;
+    }
+    #consolePrompt {
+        color: #888;
+        margin-right: 8px;
+        font-size: 14px;
+    }
+    #consoleInput {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: #d4d4d4;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+    }
+    #consoleInput::placeholder {
+        color: #555;
+    }
+</style>
     <style>
         #errorOverlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
