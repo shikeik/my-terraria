@@ -571,6 +571,7 @@
                 <div id="coords">X:0 Y:0</div>
                 <div id="mouseCoords">MX:-- MY:--</div>
                 <div id="zoom">Z:1.0</div>
+                <div id="mode">[跟随]</div>
                 <div id="fps">FPS: 0</div>
             </div>
             <!-- 快捷栏 -->
@@ -941,6 +942,9 @@
             },
             camera: { x: 0, y: 0, zoom: 10.0 },
             keys: { up: false, down: false, left: false, right: false, jump: false, sprint: false },
+            freeCamera: false,
+            lastCameraX: 0,
+            lastCameraY: 0,
             selectedBlock: 'dirt',
             isDigging: true,
             isPlacing: false,
@@ -971,6 +975,7 @@
             DOM.coordsEl       = document.getElementById('coords');
             DOM.mouseCoordsEl  = document.getElementById('mouseCoords');
             DOM.zoomEl         = document.getElementById('zoom');
+            DOM.modeEl         = document.getElementById('mode');
             DOM.fpsEl          = document.getElementById('fps');
             DOM.fullscreenBtn  = document.getElementById('fullscreenBtn');
             DOM.inventoryBtn   = document.getElementById('inventoryBtn');
@@ -1449,9 +1454,18 @@
         //  MODULE: Camera
         // ============================================================
         const Camera = {
-            update() {
-                const p = State.player;
+            update(dt) {
                 const c = State.camera;
+                if (State.freeCamera) {
+                    // 自由相机模式：方向键/摇杆直接移动相机
+                    const speed = 600 * c.zoom;
+                    if (State.keys.left)  c.x -= speed * dt;
+                    if (State.keys.right) c.x += speed * dt;
+                    if (State.keys.up)    c.y += speed * dt;
+                    if (State.keys.down)  c.y -= speed * dt;
+                    return;
+                }
+                const p = State.player;
                 const cw = window.innerWidth;
                 const ch = window.innerHeight;
                 const halfW = (cw / 2) * c.zoom;
@@ -1792,7 +1806,15 @@
                 DOM.canvas.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     const delta = e.deltaY > 0 ? 1.1 : 0.9;
+                    const rect = DOM.canvas.getBoundingClientRect();
+                    const cx = e.clientX - rect.left;
+                    const cy = e.clientY - rect.top;
+                    const ch = window.innerHeight;
+                    const worldX = State.camera.x + cx * State.camera.zoom;
+                    const worldY = State.camera.y + (ch - cy) * State.camera.zoom;
                     State.camera.zoom *= delta;
+                    State.camera.x = worldX - cx * State.camera.zoom;
+                    State.camera.y = worldY - (ch - cy) * State.camera.zoom;
                 }, { passive: false });
 
                 // 双指缩放（仅统计在画布上的手指，UI上的手指不计入）
@@ -1938,10 +1960,22 @@
                 const coords = this.getCanvasCoords(e);
                 InputState.touchCurrentX = coords.x;
                 InputState.touchCurrentY = coords.y;
+
+                if (State.freeCamera) {
+                    // 自由相机模式：滑动平移相机
+                    const dx = coords.x - InputState.touchStartX;
+                    const dy = coords.y - InputState.touchStartY;
+                    const zoom = State.camera.zoom;
+                    State.camera.x -= dx * zoom;
+                    State.camera.y += dy * zoom;
+                    InputState.touchStartX = coords.x;
+                    InputState.touchStartY = coords.y;
+                    return;
+                }
+
                 const sw = Camera.screenToWorld(coords.x, coords.y);
                 State.mouseWorldX = sw.x;
                 State.mouseWorldY = sw.y;
-                // 新逻辑：格子坐标变化立即触发，无限速
                 if (sw.x !== InputState.lastGridX || sw.y !== InputState.lastGridY) {
                     InputState.lastGridX = sw.x;
                     InputState.lastGridY = sw.y;
@@ -1975,6 +2009,10 @@
                     case 'ArrowDown':  case 'KeyS': State.keys.down  = true; break;
                     case 'KeyK':       case 'Space': State.keys.jump = true; break;
                     case 'ShiftLeft':  case 'ShiftRight': State.keys.sprint = !State.keys.sprint; break;
+                    case 'KeyV':
+                        State.freeCamera = !State.freeCamera;
+                        console.log('[camera] 自由相机模式:', State.freeCamera ? '开启' : '关闭');
+                        break;
                 }
             },
 
@@ -2081,7 +2119,7 @@
                     this.fps.lastTime = time;
                 }
                 Physics.update(dt);
-                Camera.update();
+                Camera.update(dt);
                 PlayerRenderer.update();
                 ThreeJSRenderer.updateCamera();
                 ThreeJSRenderer.render();
@@ -2094,6 +2132,7 @@
                 }
                 if (DOM.zoomEl) DOM.zoomEl.textContent = 'Z:' + State.camera.zoom.toFixed(1);
                 if (DOM.fpsEl) DOM.fpsEl.textContent = 'FPS:' + this.fps.value;
+                if (DOM.modeEl) DOM.modeEl.textContent = State.freeCamera ? '[自由]' : '[跟随]';
                 requestAnimationFrame((t) => this.tick(t));
             },
             start() {
