@@ -230,6 +230,13 @@
                 this.waterMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
                 this.scene.add(this.waterMesh);
 
+                // platform 半高 8px
+                const platGeo = new THREE.BoxGeometry(CONFIG.TILE_SIZE, 8, 1);
+                const platMat = new THREE.MeshBasicMaterial({ color: BlockRegistry.get('platform').color });
+                this.platMesh = new THREE.InstancedMesh(platGeo, platMat, maxCount);
+                this.platMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                this.scene.add(this.platMesh);
+
                 for (let x = 0; x < CONFIG.WORLD_WIDTH; x++) {
                     this.instanceMap[x] = [];
                     for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
@@ -243,7 +250,7 @@
                 const ts = CONFIG.TILE_SIZE;
                 const W = CONFIG.WORLD_WIDTH;
                 const H = CONFIG.WORLD_HEIGHT;
-                const counts = { dirt: 0, stone: 0, grass: 0, sand: 0, wood: 0, water: 0 };
+                const counts = { dirt: 0, stone: 0, grass: 0, sand: 0, wood: 0, water: 0, platform: 0 };
 
                 const solidTypes = ['dirt', 'stone', 'grass', 'sand', 'wood'];
                 solidTypes.forEach(type => {
@@ -268,6 +275,13 @@
                             const idx = counts.water++;
                             this.waterMesh.setMatrixAt(idx, this.dummy.matrix);
                             this.instanceMap[x][y] = { type: 'water', index: idx };
+                        } else if (block === 'platform') {
+                            const idx = counts.platform++;
+                            // platform 半高，中心在 y + 4（格子底部 + 4）
+                            this.dummy.position.set(px, y * ts + 4, 0);
+                            this.dummy.updateMatrix();
+                            this.platMesh.setMatrixAt(idx, this.dummy.matrix);
+                            this.instanceMap[x][y] = { type: 'platform', index: idx };
                         } else if (this.solidMeshes[block]) {
                             const idx = counts[block]++;
                             this.solidMeshes[block].setMatrixAt(idx, this.dummy.matrix);
@@ -282,6 +296,8 @@
                     this.solidMeshes[type].count = counts[type];
                     this.solidMeshes[type].instanceMatrix.needsUpdate = true;
                 });
+                this.platMesh.count = counts.platform;
+                this.platMesh.instanceMatrix.needsUpdate = true;
                 this.waterMesh.count = counts.water;
                 this.waterMesh.instanceMatrix.needsUpdate = true;
                 console.log('[three] 世界构建完成，统计:', JSON.stringify(counts));
@@ -292,7 +308,10 @@
                 if (oldType && oldType !== 'air') {
                     const info = this.instanceMap[x][y];
                     if (info) {
-                        const mesh = info.type === 'water' ? this.waterMesh : this.solidMeshes[info.type];
+                        let mesh = null;
+                        if (info.type === 'water') mesh = this.waterMesh;
+                        else if (info.type === 'platform') mesh = this.platMesh;
+                        else mesh = this.solidMeshes[info.type];
                         if (mesh) { mesh.setMatrixAt(info.index, this._matrixHide); mesh.instanceMatrix.needsUpdate = true; }
                     }
                 }
@@ -300,6 +319,8 @@
                     const px = x * ts + ts / 2;
                     const py = y * ts + ts / 2;
                     this.dummy.position.set(px, py, 0);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.scale.set(1, 1, 1);
                     this.dummy.updateMatrix();
                     if (newType === 'water') {
                         const idx = this.waterMesh.count;
@@ -307,6 +328,14 @@
                         this.waterMesh.count = idx + 1;
                         this.waterMesh.instanceMatrix.needsUpdate = true;
                         this.instanceMap[x][y] = { type: 'water', index: idx };
+                    } else if (newType === 'platform') {
+                        const idx = this.platMesh.count;
+                        this.dummy.position.set(x * ts + ts / 2, y * ts + 4, 0);
+                        this.dummy.updateMatrix();
+                        this.platMesh.setMatrixAt(idx, this.dummy.matrix);
+                        this.platMesh.count = idx + 1;
+                        this.platMesh.instanceMatrix.needsUpdate = true;
+                        this.instanceMap[x][y] = { type: 'platform', index: idx };
                     } else if (this.solidMeshes[newType]) {
                         const idx = this.solidMeshes[newType].count;
                         this.solidMeshes[newType].setMatrixAt(idx, this.dummy.matrix);
@@ -486,6 +515,96 @@
                     x: Math.floor((State.camera.x + sx) / CONFIG.TILE_SIZE),
                     y: Math.floor((State.camera.y + (ch - sy)) / CONFIG.TILE_SIZE)
                 };
+            }
+        };
+
+
+        // ============================================================
+        //  MODULE: PlayerRenderer (Three.js Group)
+        // ============================================================
+        const PlayerRenderer = {
+            group: null,
+            body: null,
+            head: null,
+            eye: null,
+            footL: null,
+            footR: null,
+            tool: null,
+
+            init() {
+                this.group = new THREE.Group();
+
+                // Group 中心在玩家 AABB 中心 (p.x+w/2, p.y+h/2, 0)
+                // 部件相对偏移 = 期望世界位置 - AABB 中心
+                // AABB 中心 y = p.y + 24 (h=48)
+                // 身体中心 y=p.y+16 → 相对=-8; 头中心 y=p.y+40 → 相对=+16
+                // 脚中心 y=p.y+4 → 相对=-20; 工具中心 y=p.y+24 → 相对=0
+
+                // 身体 24x32
+                const bodyGeo = new THREE.BoxGeometry(24, 32, 1);
+                const bodyMat = new THREE.MeshBasicMaterial({ color: 0x4a90d9 });
+                this.body = new THREE.Mesh(bodyGeo, bodyMat);
+                this.body.position.set(0, -8, 0);
+                this.group.add(this.body);
+
+                // 头 20x16
+                const headGeo = new THREE.BoxGeometry(20, 16, 1);
+                const headMat = new THREE.MeshBasicMaterial({ color: 0xffccaa });
+                this.head = new THREE.Mesh(headGeo, headMat);
+                this.head.position.set(0, 16, 0);
+                this.group.add(this.head);
+
+                // 眼睛 4x4
+                const eyeGeo = new THREE.BoxGeometry(4, 4, 1);
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+                this.eye = new THREE.Mesh(eyeGeo, eyeMat);
+                this.eye.position.set(4, 13, 0.6);
+                this.group.add(this.eye);
+
+                // 左脚 8x8
+                const footGeo = new THREE.BoxGeometry(8, 8, 1);
+                const footMat = new THREE.MeshBasicMaterial({ color: 0x3a5080 });
+                this.footL = new THREE.Mesh(footGeo, footMat);
+                this.footL.position.set(-6, -20, 0);
+                this.group.add(this.footL);
+
+                // 右脚 8x8
+                this.footR = new THREE.Mesh(footGeo, footMat);
+                this.footR.position.set(6, -20, 0);
+                this.group.add(this.footR);
+
+                // 工具 Group
+                this.tool = new THREE.Group();
+                const handleGeo = new THREE.BoxGeometry(24, 6, 1);
+                const handleMat = new THREE.MeshBasicMaterial({ color: 0x888888 });
+                const handle = new THREE.Mesh(handleGeo, handleMat);
+                handle.position.set(12, 0, 0);
+                this.tool.add(handle);
+                const toolHeadGeo = new THREE.BoxGeometry(8, 14, 1);
+                const toolHeadMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+                const toolHead = new THREE.Mesh(toolHeadGeo, toolHeadMat);
+                toolHead.position.set(28, 0, 0);
+                this.tool.add(toolHead);
+                this.tool.position.set(0, 0, 0);
+                this.group.add(this.tool);
+
+                ThreeJSRenderer.scene.add(this.group);
+                console.log('[player] 玩家渲染器初始化完成');
+            },
+
+            update() {
+                const p = State.player;
+                // Group 中心对齐玩家 AABB 中心
+                this.group.position.set(p.x + p.w / 2, p.y + p.h / 2, 0);
+
+                // 朝向：眼睛 x 偏移 + 工具 scale.x 镜像
+                if (p.facingRight) {
+                    this.eye.position.x = 4;
+                    this.tool.scale.x = 1;
+                } else {
+                    this.eye.position.x = -4;
+                    this.tool.scale.x = -1;
+                }
             }
         };
 
@@ -917,6 +1036,7 @@
                 if (dt <= 0) dt = 0.001;
                 State.frameCount++;
                 Camera.update();
+                PlayerRenderer.update();
                 ThreeJSRenderer.updateCamera();
                 ThreeJSRenderer.render();
                 DOM.coordsEl.textContent = 'X:' + Math.floor(State.player.x / CONFIG.TILE_SIZE)
@@ -971,6 +1091,7 @@
                 ThreeJSRenderer.init();
                 World.init();
                 ThreeJSRenderer.buildWorld();
+                PlayerRenderer.init();
 
                 Input.init();
                 Fullscreen.init();
