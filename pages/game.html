@@ -493,7 +493,7 @@
                         void main() {
                             // UV 内缩 0.05：消除图集粘连
                             vec2 innerUv = clamp(vUv, 0.05, 0.95);
-                            vec2 atlasUv = vec2((vTileIndex + innerUv.x) / 7.0, innerUv.y);
+                            vec2 atlasUv = vec2((vTileIndex + innerUv.x) / 8.0, innerUv.y);
                             gl_FragColor = texture2D(uAtlas, atlasUv);
                         }
                     `
@@ -819,6 +819,10 @@
                         if (y < surface - 8 && block === 'air' && Math.random() < 0.05) {
                             block = 'water';
                         }
+                        // 冰层（地表下 20~25 格）
+                        if (y < surface - 20 && y > surface - 25 && Math.random() < 0.15) {
+                            block = 'ice';
+                        }
                         State.world[x][y] = block;
                     }
                 }
@@ -1109,13 +1113,22 @@
                     if (p.vy < -CONFIG.WATER.MAX_SPEED) p.vy = -CONFIG.WATER.MAX_SPEED;
                 } else {
                     let targetVx = 0;
-                    const isSprinting = State.keys.sprint && (State.keys.left || State.keys.right);
-                    const moveSpeed = isSprinting
+                    const moveSpeed = (State.keys.sprint && (State.keys.left || State.keys.right))
                         ? CONFIG.MOVE_SPEED * CONFIG.SPRINT_SPEED
                         : CONFIG.MOVE_SPEED;
                     if (State.keys.left)  { targetVx = -moveSpeed; p.facingRight = false; }
                     else if (State.keys.right) { targetVx = moveSpeed; p.facingRight = true; }
-                    p.vx = approach(p.vx, targetVx, CONFIG.AIR_DRAG, dt);
+
+                    // 脚底摩擦力检测
+                    const footX = Math.floor((p.x + p.w / 2) / ts);
+                    const footY = Math.floor(p.y / ts) - 1;
+                    const standingBlock = World.getBlock(footX, footY);
+                    const blockData = BlockRegistry.get(standingBlock);
+                    const drag = (blockData && blockData.friction)
+                        ? blockData.friction
+                        : CONFIG.AIR_DRAG;
+
+                    p.vx = approach(p.vx, targetVx, drag, dt);
                     if (Math.abs(p.vx) < 1) p.vx = 0;
 
                     if (State.keys.jump && p.onGround) {
@@ -1354,23 +1367,24 @@
             },
 
             onKeyDown(e) {
-                switch (e.key) {
-                    case 'ArrowLeft':  case 'a': State.keys.left  = true; break;
-                    case 'ArrowRight': case 'd': State.keys.right = true; break;
-                    case 'ArrowUp':    case 'w': State.keys.up    = true; break;
-                    case 'ArrowDown':  case 's': State.keys.down  = true; break;
-                    case 'k':          case ' ': State.keys.jump = true; break;
-                    case 'Shift':      State.keys.sprint = !State.keys.sprint; break;
+                switch (e.code) {
+                    case 'ArrowLeft':  case 'KeyA': State.keys.left  = true; break;
+                    case 'ArrowRight': case 'KeyD': State.keys.right = true; break;
+                    case 'ArrowUp':    case 'KeyW': State.keys.up    = true; break;
+                    case 'ArrowDown':  case 'KeyS': State.keys.down  = true; break;
+                    case 'KeyK':       case 'Space': State.keys.jump = true; break;
+                    case 'ShiftLeft':  case 'ShiftRight': State.keys.sprint = !State.keys.sprint; break;
                 }
             },
 
             onKeyUp(e) {
-                switch (e.key) {
-                    case 'ArrowLeft':  case 'a': State.keys.left  = false; break;
-                    case 'ArrowRight': case 'd': State.keys.right = false; break;
-                    case 'ArrowUp':    case 'w': State.keys.up    = false; break;
-                    case 'ArrowDown':  case 's': State.keys.down  = false; break;
-                    case 'k':          case ' ': State.keys.jump = false; break;
+                switch (e.code) {
+                    case 'ArrowLeft':  case 'KeyA': State.keys.left  = false; break;
+                    case 'ArrowRight': case 'KeyD': State.keys.right = false; break;
+                    case 'ArrowUp':    case 'KeyW': State.keys.up    = false; break;
+                    case 'ArrowDown':  case 'KeyS': State.keys.down  = false; break;
+                    case 'KeyK':       case 'Space': State.keys.jump = false; break;
+                    // Toggle 模式：Shift 在 keydown 时切换，keyup 不处理
                 }
             }
         };
@@ -1553,6 +1567,7 @@
         BlockRegistry.register('sand',     { color: '#d4b896',           solid: true,  icon: '沙',   tooltip: '沙子',     uiColor: '#FFD700' });
         BlockRegistry.register('water',    { color: 'rgba(65,105,225,0.6)', solid: false, icon: '水',   tooltip: '水',       uiColor: '#4169E1' });
         BlockRegistry.register('platform', { color: '#C4956A',           solid: true,  icon: '台',   tooltip: '平台',     uiColor: '#C4956A' });
+        BlockRegistry.register('ice',      { color: '#ADD8E6',           solid: true,  icon: '冰',   tooltip: '冰',       uiColor: '#ADD8E6', friction: 0.98 });
         console.log('[app] 方块注册完成:', BlockRegistry.getAllPlaceable().join(', '));
 
         window.App = App;
@@ -1572,7 +1587,7 @@
         atlasCtx: null,
         atlasTexture: null,
         tileSize: 32,
-        atlasWidth: 224, // 7 * 32
+        atlasWidth: 256, // 7 * 32
         atlasHeight: 32,
 
         init() {
@@ -1647,11 +1662,28 @@
                 ctx.fillRect(0, 0, s, 2);
             }
 
+            // ice：浅蓝 + 白色高光条纹
+            if (type === 'ice') {
+                ctx.fillStyle = '#ADD8E6';
+                ctx.fillRect(0, 0, s, s);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fillRect(4, 4, 8, 2);
+                ctx.fillRect(16, 12, 10, 2);
+                ctx.fillRect(8, 20, 6, 2);
+                ctx.fillRect(22, 26, 4, 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.08)';
+                ctx.fillRect(0, 0, s, 1);
+                ctx.fillRect(0, 0, 1, s);
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                ctx.fillRect(s-1, 0, 1, s);
+                ctx.fillRect(0, s-1, s, 1);
+            }
+
             return c;
         },
 
         buildAtlas() {
-            const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water'];
+            const types = ['dirt', 'stone', 'grass', 'sand', 'wood', 'platform', 'water', 'ice'];
             const s = this.tileSize;
             this.atlasCtx.imageSmoothingEnabled = false;
             this.atlasCtx.clearRect(0, 0, this.atlasWidth, this.atlasHeight);
