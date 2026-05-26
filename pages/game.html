@@ -274,7 +274,7 @@
         max-width: 280px;
         background: rgba(20, 20, 30, 0.95);
         border-left: 2px solid #4a4a6a;
-        z-index: 1000;
+        z-index: 1500;
         transform: translateX(100%);
         transition: transform 0.25s ease;
         display: flex;
@@ -301,7 +301,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        z-index: 1000;
+        z-index: 1500;
         user-select: none;
         pointer-events: auto;
     }
@@ -595,6 +595,7 @@
                     <div class="tab-btn active" data-tab="intro">介绍</div>
                     <div class="tab-btn" data-tab="terrain">地形</div>
                     <div class="tab-btn" data-tab="blocks">方块</div>
+                    <div class="tab-btn" data-tab="game">游戏</div>
                 </div>
                 <div class="tab-content active" data-tab="intro">
                     <p>My Terraria - 简单体素世界</p>
@@ -629,10 +630,20 @@
                             <input type="range" id="dirtMinRange" min="2" max="30" value="5" style="flex:1;min-width:0;">
                             <input type="range" id="dirtMaxRange" min="4" max="60" value="10" style="flex:1;min-width:0;">
                         </div>
+                        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
+                            <label style="color:#888;font-size:11px;white-space:nowrap;">侵入: <span id="intrusionMinVal">2</span>~<span id="intrusionMaxVal">6</span></label>
+                            <input type="range" id="intrusionMinRange" min="0" max="20" value="2" style="flex:1;min-width:0;">
+                            <input type="range" id="intrusionMaxRange" min="2" max="30" value="6" style="flex:1;min-width:0;">
+                        </div>
                     </div>
                 </div>
                 <div class="tab-content" data-tab="blocks">
                     <div id="blocksGrid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;"></div>
+                </div>
+                <div class="tab-content" data-tab="game">
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <button id="cameraToggleBtn" style="padding:8px 12px;background:rgba(60,80,120,0.8);border:1px solid #5a5a7a;border-radius:4px;color:#ccc;font-size:12px;cursor:pointer;">📷 切换自由相机</button>
+                    </div>
                 </div>
             </div>
             <div id="controls" class="game-gui">
@@ -887,7 +898,9 @@
                 GRASS_DEPTH_MIN: 2,
                 GRASS_DEPTH_MAX: 5,
                 DIRT_DEPTH_MIN: 5,
-                DIRT_DEPTH_MAX: 10
+                DIRT_DEPTH_MAX: 10,
+                INTRUSION_MIN: 2,
+                INTRUSION_MAX: 6
             },
             BIOME: {
                 FREQ: 0.003,
@@ -976,7 +989,7 @@
                 onGround: false,
                 facingRight: true
             },
-            camera: { x: 0, y: 0, zoom: 10.0 },
+            camera: { x: 0, y: 0, zoom: 1.0 },
             keys: { up: false, down: false, left: false, right: false, jump: false, sprint: false },
             freeCamera: false,
             lastCameraX: 0,
@@ -1429,12 +1442,36 @@
                         const depth = surface - y;
                         let block;
 
+                        // 计算侵入强度（到最近群落边界的距离）
+                        const edgeDist = Math.min(
+                            Math.abs(bVal - T.BIOME.DESERT_THRESHOLD),
+                            Math.abs(bVal - T.BIOME.SNOW_THRESHOLD)
+                        );
+                        const blend = edgeDist < 0.15 ? (1 - edgeDist / 0.15) * 0.5 : 0;
+
                         if (y >= surface) {
                             block = 'air';
                         } else if (depth < grassDepth) {
+                            // 表层硬切，作为分界线
                             block = isDesert ? 'sand' : (isSnow ? 'snow' : 'grass');
                         } else if (depth < grassDepth + dirtDepth) {
-                            block = isDesert ? 'sandstone' : (isSnow ? 'ice' : 'dirt');
+                            const relDepth = depth - grassDepth;
+                            const nativeBlock = isDesert ? 'sandstone' : (isSnow ? 'ice' : 'dirt');
+                            const intrusionMin = T.LAYERS.INTRUSION_MIN;
+                            const intrusionMax = T.LAYERS.INTRUSION_MAX;
+                            if (relDepth >= intrusionMin && relDepth < intrusionMax && blend > 0) {
+                                const intrusionNoise = noise.noise2D(x * 0.2 + 500, relDepth * 0.3);
+                                if (intrusionNoise < blend * 2 - 1) {
+                                    // 侵入：使用异类土层
+                                    if (isDesert) block = 'dirt';
+                                    else if (isSnow) block = 'dirt';
+                                    else block = (bVal > 0 ? 'sandstone' : 'ice');
+                                } else {
+                                    block = nativeBlock;
+                                }
+                            } else {
+                                block = nativeBlock;
+                            }
                         } else {
                             block = 'stone';
                         }
@@ -2054,8 +2091,7 @@
                     case 'KeyK':       case 'Space': State.keys.jump = true; break;
                     case 'ShiftLeft':  case 'ShiftRight': State.keys.sprint = !State.keys.sprint; break;
                     case 'KeyV':
-                        State.freeCamera = !State.freeCamera;
-                        console.log('[camera] 自由相机模式:', State.freeCamera ? '开启' : '关闭');
+                        Input.toggleFreeCamera();
                         break;
                 }
             },
@@ -2069,6 +2105,18 @@
                     case 'KeyK':       case 'Space': State.keys.jump = false; break;
                     // Toggle 模式：Shift 在 keydown 时切换，keyup 不处理
                 }
+            },
+
+            toggleFreeCamera() {
+                State.freeCamera = !State.freeCamera;
+                const btn = document.getElementById('cameraToggleBtn');
+                if (btn) {
+                    btn.textContent = State.freeCamera ? '📷 切换跟随玩家' : '📷 切换自由相机';
+                }
+                if (DOM.modeEl) {
+                    DOM.modeEl.textContent = State.freeCamera ? '[自由]' : '[跟随]';
+                }
+                console.log('[camera] 自由相机模式:', State.freeCamera ? '开启' : '关闭');
             }
         };
 
@@ -2396,6 +2444,39 @@
                     });
                 }
 
+                const intrusionMinRange = document.getElementById('intrusionMinRange');
+                const intrusionMinVal = document.getElementById('intrusionMinVal');
+                const intrusionMaxRange = document.getElementById('intrusionMaxRange');
+                const intrusionMaxVal = document.getElementById('intrusionMaxVal');
+                if (intrusionMinRange && intrusionMinVal && intrusionMaxRange && intrusionMaxVal) {
+                    intrusionMinRange.value = TerrainConfig.LAYERS.INTRUSION_MIN;
+                    intrusionMinVal.textContent = TerrainConfig.LAYERS.INTRUSION_MIN;
+                    intrusionMaxRange.value = TerrainConfig.LAYERS.INTRUSION_MAX;
+                    intrusionMaxVal.textContent = TerrainConfig.LAYERS.INTRUSION_MAX;
+                    intrusionMinRange.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (val > TerrainConfig.LAYERS.INTRUSION_MAX) {
+                            TerrainConfig.LAYERS.INTRUSION_MAX = val;
+                            intrusionMaxRange.value = val;
+                            intrusionMaxVal.textContent = val;
+                        }
+                        TerrainConfig.LAYERS.INTRUSION_MIN = val;
+                        intrusionMinVal.textContent = val;
+                        console.log('[terrain] 侵入 MIN 调整为:', val);
+                    });
+                    intrusionMaxRange.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (val < TerrainConfig.LAYERS.INTRUSION_MIN) {
+                            TerrainConfig.LAYERS.INTRUSION_MIN = val;
+                            intrusionMinRange.value = val;
+                            intrusionMinVal.textContent = val;
+                        }
+                        TerrainConfig.LAYERS.INTRUSION_MAX = val;
+                        intrusionMaxVal.textContent = val;
+                        console.log('[terrain] 侵入 MAX 调整为:', val);
+                    });
+                }
+
                 if (rebuildBtn) {
                     rebuildBtn.addEventListener('click', () => {
                         const oldHeight = State.world[0] ? State.world[0].length : CONFIG.WORLD_HEIGHT;
@@ -2446,6 +2527,11 @@
                         State.player.vy = 0;
                         console.log('[terrain] 地形重建完成');
                     });
+                }
+
+                const cameraToggleBtn = document.getElementById('cameraToggleBtn');
+                if (cameraToggleBtn) {
+                    cameraToggleBtn.addEventListener('click', () => Input.toggleFreeCamera());
                 }
 
                 Input.init();
